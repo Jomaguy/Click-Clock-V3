@@ -41,9 +41,9 @@ export default function App() {
   const [uploading, setUploading] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<string>(""); // Track selected category for video upload
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]); // Track Selected categories for user preferences
-  const [videos, setVideos] = useState<{ url: string; uploaderName: string; comments: { username: string; text: string; timestamp: string }[] }[]>([]); // Retrieve user videos
+  const [videos, setVideos] = useState<{ url: string; uploaderName: string; comments: { username: string; text: string; timestamp: string }[]; likes: string[]; unlikes: string[] }[]>([]); // Retrieve user videos
   const [comment, setComment] = useState<string>(""); // Track the new comment
-  const [currentVideo, setCurrentVideo] = useState<{ url: string; uploaderName: string; comments: { username: string; text: string; timestamp: string }[] } | null>(null); // Track the currently visible video
+  const [currentVideo, setCurrentVideo] = useState<{ url: string; uploaderName: string; comments: { username: string; text: string; timestamp: string }[]; likes: string[]; unlikes: string[] } | null>(null); // Track the currently visible video
 
   const videoRefs = useRef<(HTMLDivElement | null)[]>([]); // Track the positions of the videos and determine which video is being seen
 
@@ -115,6 +115,7 @@ export default function App() {
   
     return () => unsubscribe();
   }, [user]);
+  
   
   
   
@@ -271,6 +272,8 @@ export default function App() {
           timestamp: new Date().toISOString(),
           uploaderName: user.displayName || name || user.email || "Quien", // Save uploader's name
           comments: [],
+          likes: [],
+          unlikes: [],
         }),
       });
 
@@ -283,6 +286,113 @@ export default function App() {
       setUploading(false);
     }
   };
+
+  const handleLike = async () => {
+    if (!user) {
+      alert("You must be logged in to like a video.");
+      return;
+    }
+  
+    if (!currentVideo) {
+      alert("No video is currently visible.");
+      return;
+    }
+  
+    try {
+      console.log("Liking video:", currentVideo.url);
+  
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+  
+      if (userDoc.exists()) {
+        const userVideos = userDoc.data().videos || [];
+        const updatedVideos = userVideos.map((video: any) => {
+          if (video.url === currentVideo.url) {
+            const alreadyLiked = video.likes?.includes(user.uid);
+            return {
+              ...video,
+              likes: alreadyLiked
+                ? video.likes // No change if already liked
+                : [...(video.likes || []), user.uid], // Add user to likes
+              unlikes: video.unlikes?.filter((uid: string) => uid !== user.uid) || [], // Ensure no undefined
+            };
+          }
+          return video;
+        });
+  
+        // Validate updatedVideos
+        console.log("Updated Videos:", updatedVideos);
+  
+        await updateDoc(userDocRef, { videos: updatedVideos });
+  
+        const updatedCurrentVideo = updatedVideos.find(
+          (video: any) => video.url === currentVideo.url
+        );
+        setCurrentVideo(updatedCurrentVideo || null);
+      }
+    } catch (error) {
+      console.error("Error liking video:", error);
+      alert("Failed to like the video. Please try again.");
+    }
+  };
+  
+  
+  
+  const handleUnlike = async () => {
+    if (!user) {
+      alert("You must be logged in to unlike a video.");
+      return;
+    }
+  
+    if (!currentVideo) {
+      alert("No video is currently visible.");
+      return;
+    }
+  
+    try {
+      console.log("Unliking video:", currentVideo.url);
+  
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+  
+      if (userDoc.exists()) {
+        const userVideos = userDoc.data().videos || [];
+        const updatedVideos = userVideos.map((video: any) => {
+          if (video.url === currentVideo.url) {
+            const alreadyUnliked = video.unlikes?.includes(user.uid);
+            return {
+              ...video,
+              unlikes: alreadyUnliked
+                ? video.unlikes // No change if already unliked
+                : [...(video.unlikes || []), user.uid], // Add user to unlikes
+              likes: video.likes?.filter((uid: string) => uid !== user.uid) || [], // Ensure no undefined
+            };
+          }
+          return video;
+        });
+  
+        // Validate updatedVideos
+        console.log("Updated Videos:", updatedVideos);
+  
+        await updateDoc(userDocRef, { videos: updatedVideos });
+  
+        const updatedCurrentVideo = updatedVideos.find(
+          (video: any) => video.url === currentVideo.url
+        );
+        setCurrentVideo(updatedCurrentVideo || null);
+      }
+    } catch (error) {
+      console.error("Error unliking video:", error);
+      alert("Failed to unlike the video. Please try again.");
+    }
+  };
+  
+  
+  
+
+  
+  
+  
 
   if (!isMounted) return null;
 
@@ -347,29 +457,55 @@ export default function App() {
 
 
   {/* Row 2: Add Comment Section */}
-  <div className="flex-grow h-full w-full border-b border-black p-4">
-    <h2 className="text-lg font-semibold">Add a Comment</h2>
-    {/* Add Comment Form */}
-    {currentVideo ? (
-      <div className="mt-4">
-        <textarea
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder="Write your comment..."
-          className="w-full px-4 py-2 border border-gray-300  text-black rounded-md"
-          rows={3}
-        ></textarea>
+<div className="flex-grow h-full w-full border-b border-black p-4">
+  <h2 className="text-lg font-semibold">Add a Comment</h2>
+  {/* Add Comment Form */}
+  {currentVideo ? (
+    <div className="mt-4">
+      <textarea
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        placeholder="Write your comment..."
+        className="w-full px-4 py-2 border border-gray-300  text-black rounded-md"
+        rows={3}
+      ></textarea>
+      <button
+        onClick={handleAddComment}
+        className="mt-2 px-4 py-2 bg-blue-500 text-black rounded-md"
+      >
+        Add Comment
+      </button>
+      {/* Like/Unlike Buttons */}
+      <div className="mt-4 flex space-x-4">
         <button
-          onClick={handleAddComment}
-          className="mt-2 px-4 py-2 bg-blue-500 text-black rounded-md"
+          onClick={handleLike}
+          className={`px-4 py-2 rounded-md ${
+            user?.uid && currentVideo?.likes?.includes(user.uid) ? "bg-green-500" : "bg-gray-300"
+          } text-white`}
         >
-          Add Comment
+          Like
+        </button>
+        <button
+          onClick={handleUnlike}
+          className={`px-4 py-2 rounded-md ${
+            user?.uid && currentVideo?.unlikes?.includes(user.uid) ? "bg-red-500" : "bg-gray-300"
+          } text-white`}
+        >
+          Unlike
         </button>
       </div>
-    ) : (
-      <p className="text-gray-500 mt-4">Scroll through the videos to leave a comment.</p>
-    )}
-  </div>
+
+      {/* Like/Unlike Count */}
+      <p className="mt-2 text-gray-500">
+        {currentVideo?.likes?.length || 0} {currentVideo?.likes?.length === 1 ? "like" : "likes"} |{" "}
+        {currentVideo?.unlikes?.length || 0} {currentVideo?.unlikes?.length === 1 ? "unlike" : "unlikes"}
+      </p>
+    </div>
+  ) : (
+    <p className="text-gray-500 mt-4">Scroll through the videos to leave a comment or like a video.</p>
+  )}
+</div>
+
 
 
 
