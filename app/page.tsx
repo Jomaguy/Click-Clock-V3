@@ -41,19 +41,53 @@ export default function App() {
   const [uploading, setUploading] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<string>(""); // Track selected category for video upload
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]); // Track Selected categories for user preferences
-  const [videos, setVideos] = useState<{ url: string; name: string; uploaderName: string; uploaderId: string; comments: { username: string; text: string; timestamp: string }[]; likes: string[]; unlikes: string[] }[]>([]); // Retrieve user videos
+  const [videos, setVideos] = useState<{ url: string; name: string; uploaderName: string; uploaderId: string; comments: { username: string; text: string; timestamp: string }[] }[]>([]); // Retrieve user videos
   const [comment, setComment] = useState<string>(""); // Track the new comment
-  const [currentVideo, setCurrentVideo] = useState<{ url: string; name: string; uploaderName: string; uploaderId: string; comments: { username: string; text: string; timestamp: string }[]; likes: string[]; unlikes: string[] } | null>(null); // Track the currently visible video
+  const [currentVideo, setCurrentVideo] = useState<{ url: string; name: string; uploaderName: string; uploaderId: string; comments: { username: string; text: string; timestamp: string }[] } | null>(null); // Track the currently visible video
 
   const videoRefs = useRef<(HTMLDivElement | null)[]>([]); // Track the positions of the videos and determine which video is being seen
+
+  const [userComments, setUserComments] = useState<{ videoName: string; content: string }[]>([]);
+  const [userInfo, setUserInfo] = useState<any>(null);
+
+    // The name of the video being uploaded
+    const [videoName, setVideoName] = useState<string>(""); // Track user-defined video name
+
+
+  useEffect(() => {
+    if (user) {
+      const fetchUserComments = async () => {
+        try {
+          const userDocRef = doc(db, "users", user.uid);
+          const userDoc = await getDoc(userDocRef);
+  
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            setUserInfo(data);
+  
+            // Extract comments
+            const comments = data.comments || [];
+            setUserComments(comments);
+          }
+        } catch (error) {
+          console.error("Error fetching user comments:", error);
+        }
+      };
+  
+      fetchUserComments();
+    }
+  }, [user]);
+
 
   // State for modal visibility
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-  const [likedVideos, setLikedVideos] = useState<string[]>([]);
+  const toggleProfileModal = () => {
+    setIsProfileModalOpen(!isProfileModalOpen);
+  };
 
-  // The name of the video being uploaded
-  const [videoName, setVideoName] = useState<string>(""); // Track user-defined video name
+
+
 
 
   
@@ -83,7 +117,7 @@ export default function App() {
       if (ref) {
         const rect = ref.getBoundingClientRect();
         if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
-          // Directly set `currentVideo` without waiting for updates from Firestore
+          // Update `currentVideo` when the video is fully visible in the viewport
           const visibleVideo = videos[index];
           if (visibleVideo && (!currentVideo || visibleVideo.url !== currentVideo.url)) {
             setCurrentVideo(visibleVideo);
@@ -92,6 +126,7 @@ export default function App() {
       }
     });
   };
+  
   
 
   useEffect(() => {
@@ -105,7 +140,8 @@ export default function App() {
         leftColumn.removeEventListener("scroll", handleScroll);
       }
     };
-  }, [videos]);
+  }, [videos, currentVideo]);
+  
 
   
   useEffect(() => {
@@ -220,8 +256,6 @@ export default function App() {
           uploaderName: data.uploaderName,
           uploaderId: data.uploaderId, // Add uploaderId here
           comments: data.comments || [],
-          likes: data.likes || [],
-          unlikes: data.unlikes || [],
         };
       });
       setVideos(allVideos);
@@ -239,27 +273,9 @@ export default function App() {
   }, [user]);
 
 
-  const fetchLikedVideos = async () => {
-    if (!user) return;
+ 
   
-    const userDocRef = doc(db, "users", user.uid);
-    const userDoc = await getDoc(userDocRef);
-  
-    if (userDoc.exists()) {
-      const userVideos = userDoc.data().videos || [];
-      const likedVideos = userVideos
-        .filter((video: any) => video.likes?.includes(user.uid))
-        .map((video: any) => video.name || video.url);
-      setLikedVideos(likedVideos);
-    }
-  };
-  
-  const toggleProfileModal = () => {
-    setIsProfileModalOpen(!isProfileModalOpen);
-    if (!isProfileModalOpen) {
-      fetchLikedVideos();
-    }
-  };
+ 
 
   // Handle user sign-up or sign-in
   const handleAuth = async () => {
@@ -344,8 +360,7 @@ export default function App() {
         timestamp: new Date().toISOString(),
         uploaderName: user.displayName || name || user.email || "Unnamed",
         comments: [],
-        likes: [],
-        unlikes: [],
+  
       });
   
       alert("Video uploaded successfully!");
@@ -357,170 +372,39 @@ export default function App() {
       setUploading(false);
     }
   };
+
+  const getVideoDocRef = async (url: string) => {
+    const videosCollectionRef = collection(db, "videos");
+    const querySnapshot = await getDocs(videosCollectionRef);
+  
+    let videoDocRef = null;
+    querySnapshot.forEach((docSnapshot) => {
+      const data = docSnapshot.data();
+      if (data.url === url) {
+        videoDocRef = doc(db, "videos", docSnapshot.id);
+      }
+    });
+  
+    return videoDocRef;
+  };
+
+  const updateCurrentVideoState = (updatedVideo: any) => {
+    setCurrentVideo(updatedVideo);
+  
+    setVideos((prevVideos) =>
+      prevVideos.map((video) =>
+        video.url === updatedVideo.url ? updatedVideo : video
+      )
+    );
+  };
+  
   
 
-  const handleLike = async () => {
-    if (!user) {
-      alert("You must be logged in to like a video.");
-      return;
-    }
   
-    if (!currentVideo) {
-      alert("No video is currently visible.");
-      return;
-    }
-  
-    try {
-      console.log("Liking video:", currentVideo.url);
-  
-      const userDocRef = doc(db, "users", user.uid);
-      const userDoc = await getDoc(userDocRef);
-  
-      if (userDoc.exists()) {
-        const userLikes = userDoc.data().likes || [];
-  
-        // Check if the video is already liked
-        const alreadyLiked = userLikes.some(
-          (like: any) => like.url === currentVideo.url
-        );
-        if (alreadyLiked) {
-          alert("You have already liked this video.");
-          return;
-        }
-  
-        const timestamp = new Date().toISOString();
-        const userLikeData = {
-          videoName: currentVideo.name || "Unnamed Video",
-          url: currentVideo.url,
-          timestamp,
-        };
-  
-        const videoLikeData = {
-          username: user.displayName || name || user.email || "Anonymous",
-          timestamp,
-        };
-  
-        // Update the user's collection
-        await updateDoc(userDocRef, {
-          likes: arrayUnion(userLikeData),
-        });
-  
-        // Update the videos collection
-        const videosCollectionRef = collection(db, "videos");
-        const querySnapshot = await getDocs(videosCollectionRef);
-  
-        let videoDocRef = null;
-  
-        querySnapshot.forEach((docSnapshot) => {
-          const data = docSnapshot.data();
-          if (data.url === currentVideo.url) {
-            videoDocRef = doc(db, "videos", docSnapshot.id);
-          }
-        });
-  
-        if (videoDocRef) {
-          await updateDoc(videoDocRef, {
-            likes: arrayUnion(videoLikeData),
-          });
-          alert("Video liked successfully!");
-        } else {
-          console.error("No matching video found in the videos collection.");
-          alert("Failed to update the videos collection. Video not found.");
-        }
-      }
-    } catch (error) {
-      console.error("Error liking video:", error);
-      alert("Failed to like the video. Please try again.");
-    }
-  };
-  
-  
-  
-  
-  const handleUnlike = async () => {
-    if (!user) {
-      alert("You must be logged in to unlike a video.");
-      return;
-    }
-  
-    if (!currentVideo) {
-      alert("No video is currently visible.");
-      return;
-    }
-  
-    try {
-      console.log("Unliking video:", currentVideo.url);
-  
-      const userDocRef = doc(db, "users", user.uid);
-      const userDoc = await getDoc(userDocRef);
-  
-      if (userDoc.exists()) {
-        const userUnlikes = userDoc.data().unlikes || [];
-        const userLikes = userDoc.data().likes || [];
-  
-        // Check if the video is currently liked or unliked
-        const alreadyUnliked = userUnlikes.some(
-          (unlike: any) => unlike.url === currentVideo.url
-        );
-        if (alreadyUnliked) {
-          alert("You have already unliked this video.");
-          return;
-        }
-  
-        const alreadyLiked = userLikes.some(
-          (like: any) => like.url === currentVideo.url
-        );
-  
-        const timestamp = new Date().toISOString();
-        const userUnlikeData = {
-          videoName: currentVideo.name || "Unnamed Video",
-          url: currentVideo.url,
-          timestamp,
-        };
-  
-        const videoUnlikeData = {
-          username: user.displayName || name || user.email || "Anonymous",
-          timestamp,
-        };
-  
-        // Update the user's collection: remove from likes and add to unlikes
-        const updatedLikes = alreadyLiked
-          ? userLikes.filter((like: any) => like.url !== currentVideo.url)
-          : userLikes;
-  
-        await updateDoc(userDocRef, {
-          likes: updatedLikes,
-          unlikes: arrayUnion(userUnlikeData),
-        });
-  
-        // Update the videos collection
-        const videosCollectionRef = collection(db, "videos");
-        const querySnapshot = await getDocs(videosCollectionRef);
-  
-        let videoDocRef = null;
-  
-        querySnapshot.forEach((docSnapshot) => {
-          const data = docSnapshot.data();
-          if (data.url === currentVideo.url) {
-            videoDocRef = doc(db, "videos", docSnapshot.id);
-          }
-        });
-  
-        if (videoDocRef) {
-          await updateDoc(videoDocRef, {
-            unlikes: arrayUnion(videoUnlikeData),
-          });
-          alert("Video unliked successfully!");
-        } else {
-          console.error("No matching video found in the videos collection.");
-          alert("Failed to update the videos collection. Video not found.");
-        }
-      }
-    } catch (error) {
-      console.error("Error unliking video:", error);
-      alert("Failed to unlike the video. Please try again.");
-    }
-  };
+
+ 
+     
+ 
   
   
   
@@ -619,11 +503,21 @@ export default function App() {
             )}
             </div>
   
-            {/* Column 3 */}
+            {/* Column 3: User C */}
             <div className="bg-gray-100 p-4 rounded-lg">
-              <h3 className="text-lg font-medium">Column 3</h3>
-              <p className="text-gray-600">Content for the third column goes here.</p>
-            </div>
+          <h3 className="text-lg font-medium">Your Comments</h3>
+          {userComments.length > 0 ? (
+            <ul className="mt-4 space-y-2">
+              {userComments.map((comment, index) => (
+                <li key={index} className="text-black">
+                  <strong>{comment.videoName}</strong>: {comment.content}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-black mt-4">No comments yet.</p>
+          )}
+        </div>
   
             {/* Column 4 */}
             <div className="bg-gray-100 p-4 rounded-lg">
@@ -688,14 +582,14 @@ export default function App() {
   <h2 className="text-lg font-semibold">Comments</h2>
   {currentVideo ? (
     <div className="mt-4 space-y-2">
-      {currentVideo.comments?.length > 0 ? (
+      {currentVideo.comments && currentVideo.comments.length > 0 ? (
         currentVideo.comments.map((comment, index) => (
           <div
             key={index}
             className="p-2 border border-gray-300 text-black rounded-md"
           >
             <p className="text-sm font-medium">
-              {comment.username || currentVideo.uploaderName || "Anonymous"}
+              {comment.username || "Anonymous"}
             </p>
             <p>{comment.text}</p>
             <p className="text-xs text-gray-500">
@@ -711,6 +605,7 @@ export default function App() {
     <p className="text-gray-500 mt-4">Scroll through the videos to see comments.</p>
   )}
 </div>
+
 
 
   {/* Row 2: Add Comment Section */}
@@ -732,30 +627,12 @@ export default function App() {
       >
         Add Comment
       </button>
-      {/* Like/Unlike Buttons */}
       <div className="mt-4 flex space-x-4">
-        <button
-          onClick={handleLike}
-          className={`px-4 py-2 rounded-md ${
-            user?.uid && currentVideo?.likes?.includes(user.uid) ? "bg-green-500" : "bg-gray-300"
-          } text-white`}
-        >
-          Like
-        </button>
-        <button
-          onClick={handleUnlike}
-          className={`px-4 py-2 rounded-md ${
-            user?.uid && currentVideo?.unlikes?.includes(user.uid) ? "bg-red-500" : "bg-gray-300"
-          } text-white`}
-        >
-          Unlike
-        </button>
+      
       </div>
 
-      {/* Like/Unlike Count */}
       <p className="mt-2 text-gray-500">
-        {currentVideo?.likes?.length || 0} {currentVideo?.likes?.length === 1 ? "like" : "likes"} |{" "}
-        {currentVideo?.unlikes?.length || 0} {currentVideo?.unlikes?.length === 1 ? "unlike" : "unlikes"}
+  
       </p>
 
       {/* Share Button */}
