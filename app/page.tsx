@@ -1,4 +1,39 @@
+/*
+Compared to the user interfaces the code is divided in the following way:
+1.Imports
+2.Left Column
+3.Right Column 
+   3.1 First Row
+   Display comments(list functions)
+   3.2 Second Row
+   Add comments
+   Like(Coming)
+   Share
+   3.3 Third Row
+   Sign Up/Sign In
+      Profile
+          Modal
+            Column1 -- User Information
+            Column2 -- Liked Videos (Coming)
+            Column3 -- Comments (Coming)
+            Column4 -- Uploaded Videos(Coming)
+      Sign Out
+      Upload Video
+          Video Name
+          Category Selector
+          Upload Video
+
+  4. Front code
+     
+
+
+*/
+
+
+
 "use client";
+
+
 
 import { useState, useEffect, useRef } from "react";
 import {
@@ -12,7 +47,7 @@ import {
   uploadBytes,
   getDownloadURL,
 } from "firebase/storage";
-import { doc, setDoc, updateDoc, arrayUnion, getDoc, onSnapshot, collection, getDocs } from "firebase/firestore";
+import { doc, setDoc, updateDoc, arrayUnion, arrayRemove, getDoc,collection, getDocs } from "firebase/firestore";
 import { auth, storage, db } from "./lib/firebase";
 
 // Define video categories (lowercase with hyphens to match rules)
@@ -37,79 +72,85 @@ export default function App() {
   const [dob, setDob] = useState<string>("");
   const [isSignUp, setIsSignUp] = useState<boolean>(true);
   const [user, setUser] = useState<User | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
   const [uploading, setUploading] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<string>(""); // Track selected category for video upload
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]); // Track Selected categories for user preferences
-  const [videos, setVideos] = useState<{ url: string; name: string; uploaderName: string; uploaderId: string; comments: { username: string; text: string; timestamp: string }[] }[]>([]); // Retrieve user videos
+  const [videos, setVideos] = useState<{
+    id: string,
+    url: string;
+    name: string;
+    uploaderName: string;
+    uploaderId: string;
+    comments: { username: string; text: string; timestamp: string }[];
+    likes: { username: string; timestamp: string }[]; // Include likes field
+  }[]>([]);
   const [comment, setComment] = useState<string>(""); // Track the new comment
-  const [currentVideo, setCurrentVideo] = useState<{ url: string; name: string; uploaderName: string; uploaderId: string; comments: { username: string; text: string; timestamp: string }[] } | null>(null); // Track the currently visible video
+  const [currentVideo, setCurrentVideo] = useState<{
+    id:string,
+    url: string;
+    name: string;
+    uploaderName: string;
+    uploaderId: string;
+    comments: { username: string; text: string; timestamp: string }[];
+    likes: { username: string; timestamp: string }[]; // Include likes field
+  } | null>(null);
+  const [videoName, setVideoName] = useState<string>(""); // Track user-defined video name
+  // State for modal visibility
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  
+  interface UserComment {
+    videoName: string;
+    content: string;
+    timestamp: string;
+  }
+
+  interface UploadedVideo {
+    name: string;
+    category: string;
+  }
+
+  interface UserInfo {
+    name?: string;
+    username?: string;
+    email?: string;
+    dob?: string;
+    interests?: string[];
+    videos?: { name: string; likes?: string[] }[];
+  }
+
+
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([]); // Fetch the users selected interests
+
+  const [userComments, setUserComments] = useState<UserComment[]>([]); // Fetch the comments of the user signed in
+  const [userVideos, setUserVideos] = useState<UploadedVideo[]>([]); // Fetch the name and category of the videos the user uploaded
+ 
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null); // User information for the profile modal
 
   const videoRefs = useRef<(HTMLDivElement | null)[]>([]); // Track the positions of the videos and determine which video is being seen
 
-  const [userComments, setUserComments] = useState<{ videoName: string; content: string }[]>([]);
-  const [userInfo, setUserInfo] = useState<any>(null);
-
-    // The name of the video being uploaded
-    const [videoName, setVideoName] = useState<string>(""); // Track user-defined video name
 
 
-  useEffect(() => {
-    if (user) {
-      const fetchUserComments = async () => {
-        try {
-          const userDocRef = doc(db, "users", user.uid);
-          const userDoc = await getDoc(userDocRef);
-  
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            setUserInfo(data);
-  
-            // Extract comments
-            const comments = data.comments || [];
-            setUserComments(comments);
-          }
-        } catch (error) {
-          console.error("Error fetching user comments:", error);
-        }
-      };
-  
-      fetchUserComments();
-    }
-  }, [user]);
-
-
-  // State for modal visibility
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-
-  const toggleProfileModal = () => {
-    setIsProfileModalOpen(!isProfileModalOpen);
-  };
-
-
-
-
-
-  
-
-
- 
   // Monitor authentication state
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user || null);
-    });
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    setUser(user || null); // Update user state when auth state changes
+  });
 
-    setIsMounted(true);
-
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    console.log("Current Video:", currentVideo); // Debug log for currentVideo
-  }, [currentVideo]);
+  // Cleanup subscription on component unmount
+  return () => unsubscribe();
+}, []);
 
 
+
+
+
+    // Function to toggle the profile modal
+    const toggleProfileModal = () => {
+      setIsProfileModalOpen(!isProfileModalOpen);
+    };
+
+  
+  // Function to handle scrolling
   const handleScroll = () => {
     if (!videoRefs.current) return;
   
@@ -128,7 +169,7 @@ export default function App() {
   };
   
   
-
+  // Hook that tracks the state of the left column and calls the handleScroll function
   useEffect(() => {
     const leftColumn = document.querySelector(".left-column");
     if (leftColumn) {
@@ -143,30 +184,8 @@ export default function App() {
   }, [videos, currentVideo]);
   
 
-  
-  useEffect(() => {
-    if (!user) return;
-  
-    const userDocRef = doc(db, "users", user.uid);
-  
-    const unsubscribe = onSnapshot(userDocRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const userVideos = docSnapshot.data().videos || [];
-        setVideos(userVideos); // Only update `videos` state
-      }
-    });
-  
-    return () => unsubscribe();
-  }, [user]);
-  
-  
-  
-  
-  
 
-
-
-
+  // Function to add new comment  
   const handleAddComment = async () => {
     if (!user) {
       alert("You must be logged in to comment.");
@@ -197,8 +216,7 @@ export default function App() {
         text: comment.trim(),
         timestamp,
       };
-  
-      // Update the user's profile (users collection)
+
       const userDocRef = doc(db, "users", user.uid);
       await updateDoc(userDocRef, {
         comments: arrayUnion(commentDataForUser), // Add the new comment to the user's profile
@@ -216,17 +234,42 @@ export default function App() {
           videoDocRef = doc(db, "videos", docSnapshot.id); // Get the reference to the matching document
         }
       });
+
   
       if (videoDocRef) {
         await updateDoc(videoDocRef, {
           comments: arrayUnion(commentDataForVideo), // Add the new comment to the video document
         });
+
+        // Update the currentVideo state with the new comment
+      setCurrentVideo((prevVideo) => {
+        if (!prevVideo) return prevVideo;
+        return {
+          ...prevVideo,
+          comments: [...prevVideo.comments, commentDataForVideo],
+        };
+      });
+
+      // Update the videos state to reflect the new comment
+      setVideos((prevVideos) =>
+        prevVideos.map((video) =>
+          video.url === currentVideo.url
+            ? { ...video, comments: [...video.comments, commentDataForVideo] }
+            : video
+        )
+      );
+
+
+
+
         alert("Comment added successfully!");
       } else {
         console.error("No matching video found in the videos collection.");
         alert("Failed to update the video collection. Video not found.");
       }
-  
+      
+      
+
       setComment(""); // Reset the comment field
     } catch (error) {
       console.error("Error adding comment:", error);
@@ -234,15 +277,7 @@ export default function App() {
     }
   };
   
-  
-  
-  
-  
-      
-  
-
-
-
+  // Function to fetch videos from the videos collection
   const fetchVideos = async () => {
     try {
       const videosCollectionRef = collection(db, "videos");
@@ -251,11 +286,13 @@ export default function App() {
       const allVideos = querySnapshot.docs.map((doc) => {
         const data = doc.data();
         return {
+          id: doc.id, // Include Firestore document ID
           url: data.url,
           name: data.name || "Unnamed Video", // Ensure name is included
           uploaderName: data.uploaderName,
           uploaderId: data.uploaderId, // Add uploaderId here
           comments: data.comments || [],
+          likes: data.likes || [],
         };
       });
       setVideos(allVideos);
@@ -264,18 +301,10 @@ export default function App() {
     }
   };
   
-
-
+  // The hook to call fetchvideos 
   useEffect(() => {
-    if (user) {
-      fetchVideos();
-    }
-  }, [user]);
-
-
- 
-  
- 
+    fetchVideos();
+  }, []);
 
   // Handle user sign-up or sign-in
   const handleAuth = async () => {
@@ -350,21 +379,25 @@ export default function App() {
           timestamp: new Date().toISOString(),
         }),
       });
-  
+
+ 
       // Save video to global collection
-      const globalVideoDocRef = doc(db, "videos", `${user.uid}-${file.name}`);
-      await setDoc(globalVideoDocRef, {
+      const videoDocRef = doc(collection(db, "videos")); // Generates a unique ID
+
+      await setDoc(videoDocRef, {
         url: downloadURL,
         name: videoName.trim(), // Save the user-defined name
         category: selectedCategory,
         timestamp: new Date().toISOString(),
         uploaderName: user.displayName || name || user.email || "Unnamed",
+        uploaderId: user.uid,
         comments: [],
-  
+        likes: [],
       });
   
       alert("Video uploaded successfully!");
       setSelectedCategory(""); // Reset category
+      fetchVideos(); // Fetch videos after upload
     } catch (error) {
       console.error("Error uploading video:", error);
       alert("Failed to upload video. Please try again.");
@@ -373,83 +406,216 @@ export default function App() {
     }
   };
 
-  const getVideoDocRef = async (url: string) => {
-    const videosCollectionRef = collection(db, "videos");
-    const querySnapshot = await getDocs(videosCollectionRef);
-  
-    let videoDocRef = null;
-    querySnapshot.forEach((docSnapshot) => {
-      const data = docSnapshot.data();
-      if (data.url === url) {
-        videoDocRef = doc(db, "videos", docSnapshot.id);
+  const fetchUserComments = async () => {
+    if (!user) {
+      console.error("User is not logged in.");
+      return;
+    }
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setUserComments(data.comments || []);
       }
-    });
-  
-    return videoDocRef;
+    } catch (error) {
+      console.error("Error fetching user comments:", error);
+    }
   };
 
-  const updateCurrentVideoState = (updatedVideo: any) => {
-    setCurrentVideo(updatedVideo);
-  
-    setVideos((prevVideos) =>
-      prevVideos.map((video) =>
-        video.url === updatedVideo.url ? updatedVideo : video
-      )
+  const fetchUserVideos = async () => {
+    if (!user) {
+      console.error("User is not logged in.");
+      return;
+    }
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setUserVideos(data.videos || []);
+      }
+    } catch (error) {
+      console.error("Error fetching user videos:", error);
+    }
+  };
+
+  const fetchUserInfo = async () => {
+    if (!user) {
+      console.error("User is not logged in.");
+      return;
+    }
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setUserInfo(data);
+        setSelectedInterests(data.interests || []);
+      }
+    } catch (error) {
+      console.error("Error fetching user info:", error);
+    }
+  };
+
+
+  useEffect(() => {
+    if (user) {
+      fetchUserComments();
+      fetchUserVideos();
+      fetchUserInfo();
+
+    }
+  }, [user]);
+
+  const handleInterestChange = (interest: string) => {
+    setSelectedInterests((prevInterests) =>
+      prevInterests.includes(interest)
+        ? prevInterests.filter((i) => i !== interest)
+        : [...prevInterests, interest]
     );
   };
-  
-  
 
-  
-
- 
-     
- 
-  
-  
-  
-  
-
-  if (!isMounted) return null;
-
-  const ProfileModal = () => {
-    interface UserInfo {
-      name?: string;
-      username?: string;
-      email?: string;
-      dob?: string;
-      interests?: string[];
-      videos?: { name: string; likes?: string[] }[];
+  const handleUpdatePreferences = async () => {
+    if (!user) {
+      alert("You must be logged in to update preferences.");
+      return;
     }
-    
-    const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-    const [likedVideos, setLikedVideos] = useState<string[]>([]);
+
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      await updateDoc(userDocRef, {
+        interests: selectedInterests,
+      });
+
+      alert("Preferences updated successfully!");
+    } catch (error) {
+      console.error("Error updating preferences:", error);
+      alert("Failed to update preferences. Please try again.");
+    }
+  };
+
+  const handleLike = async () => {
+    if (!user) {
+      alert("You must be logged in to like a video.");
+      return;
+    }
   
-    useEffect(() => {
-      if (user) {
-        const fetchUserInfo = async () => {
-          try {
-            const userDocRef = doc(db, "users", user.uid); // Replace "users" with your Firestore collection
-            const userDoc = await getDoc(userDocRef);
+    if (!currentVideo) {
+      alert("No video selected.");
+      return;
+    }
   
-            if (userDoc.exists()) {
-              const data = userDoc.data();
-              setUserInfo(data);
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const videoDocRef = doc(db, "videos", currentVideo.id);
   
-              // Extract liked videos
-              const likedVideos = data.videos
-                ?.filter((video: { likes?: string[] }) => video.likes?.includes(user.uid))
-                ?.map((video: { name: string; likes?: string[] }) => video.name); // Assuming each video has a `name` field
-              setLikedVideos(likedVideos || []);
-            }
-          } catch (error) {
-            console.error("Error fetching user info:", error);
-          }
-        };
+      const userDoc = await getDoc(userDocRef);
+      const videoDoc = await getDoc(videoDocRef);
   
-        fetchUserInfo();
+      const userLikes = userDoc.exists() ? userDoc.data().likes || [] : [];
+      const alreadyLiked = userLikes.some((like: { url: string }) => like.url === currentVideo.url);
+  
+      if (alreadyLiked) {
+        alert("You have already liked this video.");
+        return;
       }
-    }, [user]);
+  
+      const timestamp = new Date().toISOString();
+      const userLikeData = {
+        timestamp,
+        url: currentVideo.url,
+        videoName: currentVideo.name,
+      };
+  
+      const videoLikeData = {
+        timestamp,
+        username: user.displayName || user.email || "Anonymous",
+      };
+  
+      // Optimistically update local state for immediate feedback
+      setCurrentVideo((prevVideo) => {
+        if (!prevVideo) return prevVideo;
+        return {
+          ...prevVideo,
+          likes: [...prevVideo.likes, videoLikeData],
+        };
+      });
+  
+      setVideos((prevVideos) =>
+        prevVideos.map((video) =>
+          video.id === currentVideo.id
+            ? {
+                ...video,
+                likes: [...video.likes, videoLikeData],
+              }
+            : video
+        )
+      );
+  
+      // Update the user's likes in Firestore
+      await updateDoc(userDocRef, {
+        likes: arrayUnion(userLikeData),
+      });
+  
+      // Update the video's likes in Firestore
+      await updateDoc(videoDocRef, {
+        likes: arrayUnion(videoLikeData),
+      });
+  
+      alert("Video liked successfully!");
+    } catch (error) {
+      console.error("Error liking video:", error);
+      alert("Failed to like video. Please try again.");
+    }
+  };
+  
+  
+  
+
+  
+
+
+
+
+
+
+
+
+  
+  // All the code that has to do with the profileModal
+  const ProfileModal = () => {
+
+  
+
+  useEffect(() => {
+    if (user) {
+      const fetchUserInfo = async () => {
+        try {
+          const userDocRef = doc(db, "users", user.uid);
+          const userDoc = await getDoc(userDocRef);
+
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            setUserInfo(data);
+          }
+        } catch (error) {
+          console.error("Error fetching user info:", error);
+        }
+      };
+
+      fetchUserInfo();
+    }
+  }, [user]);
+  
+
+
+  
+
+
   
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -478,10 +644,32 @@ export default function App() {
                 <div className="mt-4">
                   <p className="text-gray-600"><strong>Name:</strong> {userInfo.name || "N/A"}</p>
                   <p className="text-gray-600"><strong>Username:</strong> {userInfo.username || "N/A"}</p>
-                  <p className="text-gray-600"><strong>Email:</strong> {user?.email || "N/A"}</p>
+                  <p className="text-gray-600"><strong>Email:</strong> {user ? user.email : "N/A"}</p>
                   <p className="text-gray-600"><strong>Date of Birth:</strong> {userInfo.dob || "N/A"}</p>
-                  <p className="text-gray-600"><strong>Interests:</strong> {userInfo.interests?.join(", ") || "N/A"}</p>
+                  <div className="text-gray-600">
+                  <strong>Interests:</strong>
+                  <div className="mt-2">
+                    {VideoCategories.map((interest) => (
+                      <div key={interest} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id={interest}
+                          checked={selectedInterests.includes(interest)}
+                          onChange={() => handleInterestChange(interest)}
+                          className="mr-2"
+                        />
+                        <label htmlFor={interest}>{interest}</label>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={handleUpdatePreferences}
+                    className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                  >
+                    Update Preferences
+                  </button>
                 </div>
+              </div>
               ) : (
                 <p className="text-gray-600 mt-4">Loading user information...</p>
               )}
@@ -489,42 +677,57 @@ export default function App() {
   
             {/* Column 2: Liked Videos */}
             <div className="bg-gray-100 p-4 rounded-lg">
-            <h3 className="text-lg font-medium text-black">Liked Videos</h3>
-              {likedVideos.length > 0 ? (
-            <ul className="mt-4 space-y-2">
-              {likedVideos.map((videoName, index) => (
-            <li key={index} className="text-black">
-              {videoName || "Unnamed Video"} {/* Fallback for missing names */}
-            </li>
-              ))}
-            </ul>
-            ) : (
-            <p className="text-black mt-4">No liked videos yet.</p>
-            )}
+            <button className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">
+              Access Your liked Videos
+            </button>
             </div>
   
-            {/* Column 3: User C */}
+            {/* Column 3 */}
             <div className="bg-gray-100 p-4 rounded-lg">
-          <h3 className="text-lg font-medium">Your Comments</h3>
-          {userComments.length > 0 ? (
-            <ul className="mt-4 space-y-2">
+            <h3 className="text-lg font-medium">Your Comments</h3>
+            {userComments.length > 0 ? (
+            <div className="mt-4 space-y-2 max-h-96 overflow-y-auto">
               {userComments.map((comment, index) => (
-                <li key={index} className="text-black">
-                  <strong>{comment.videoName}</strong>: {comment.content}
-                </li>
-              ))}
-            </ul>
+                <div key={index} className="p-2 border border-gray-300 text-black rounded-md">
+                  <p className="text-sm font-medium">
+              <strong>Video:</strong> {comment.videoName || "Unnamed Video"}
+                </p>
+                <p>{comment.content}</p>
+                <p className="text-xs text-gray-500">
+                  {new Date(comment.timestamp).toLocaleString()}
+                </p>
+              </div>
+            ))}
+         </div>
           ) : (
-            <p className="text-black mt-4">No comments yet.</p>
+          <p className="text-gray-600 mt-4">You have not commented on any videos yet.</p>
           )}
-        </div>
+          </div>
   
             {/* Column 4 */}
-            <div className="bg-gray-100 p-4 rounded-lg">
-              <h3 className="text-lg font-medium">Column 4</h3>
-              <p className="text-gray-600">Content for the fourth column goes here.</p>
-            </div>
+            <div className="bg-gray-100 p-4 rounded-lg flex flex-col h-full">
+            <h3 className="text-lg font-medium">Your Uploaded Videos</h3>
+            <button className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">
+              Access Your Uploaded Videos
+            </button>
+            {userVideos.length > 0 ? (
+              <div className="mt-4 space-y-2 flex-grow overflow-y-auto">
+                {userVideos.map((video, index) => (
+                  <div key={index} className="p-2 border border-gray-300 text-black rounded-md">
+                    <p className="text-sm font-medium">
+                      <strong>Video:</strong> {video.name || "Unnamed Video"}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Category: {video.category}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-600 mt-4">You have not uploaded any videos yet.</p>
+            )}
           </div>
+        </div>
   
           {/* Close Button */}
           <div className="flex justify-center">
@@ -579,38 +782,43 @@ export default function App() {
   
   {/* Row 1: Display Comments */}
 <div className="flex-grow h-full w-full border-b border-black p-4 overflow-y-auto">
-  <h2 className="text-lg font-semibold">Comments</h2>
+  <h2 className="text-lg text-black font-semibold">Comments</h2>
   {currentVideo ? (
-    <div className="mt-4 space-y-2">
-      {currentVideo.comments && currentVideo.comments.length > 0 ? (
-        currentVideo.comments.map((comment, index) => (
-          <div
-            key={index}
-            className="p-2 border border-gray-300 text-black rounded-md"
-          >
-            <p className="text-sm font-medium">
-              {comment.username || "Anonymous"}
-            </p>
-            <p>{comment.text}</p>
-            <p className="text-xs text-gray-500">
-              {new Date(comment.timestamp).toLocaleString()}
-            </p>
-          </div>
-        ))
-      ) : (
-        <p className="text-gray-500">No comments yet. Be the first to comment!</p>
-      )}
+  <div className="mt-4 space-y-2">
+    {/* Video Information */}
+    <div className="bg-gray-100 p-4 rounded-lg">
+      <p className="text-lg text-black font-semibold">{currentVideo.name}</p>
+      <p className="text-sm text-black">Uploaded by: {currentVideo.uploaderName}</p>
     </div>
-  ) : (
-    <p className="text-gray-500 mt-4">Scroll through the videos to see comments.</p>
-  )}
+    {currentVideo.comments && currentVideo.comments.length > 0 ? (
+      currentVideo.comments.map((comment, index) => (
+        <div
+          key={index}
+          className="p-2 border border-gray-300 text-black rounded-md"
+        >
+          <p className="text-sm font-medium">
+            {comment.username || "Anonymous"}
+          </p>
+          <p>{comment.text}</p>
+          <p className="text-xs text-gray-500">
+            {new Date(comment.timestamp).toLocaleString()}
+          </p>
+        </div>
+      ))
+    ) : (
+      <p className="text-gray-500">No comments yet. Be the first to comment!</p>
+    )}
+  </div>
+) : (
+  <p className="text-gray-500 mt-4">Scroll through the videos to see comments.</p>
+)}
 </div>
 
 
 
   {/* Row 2: Add Comment Section */}
 <div className="flex-grow h-full w-full border-b border-black p-4">
-  <h2 className="text-lg font-semibold">Add a Comment</h2>
+  <h2 className="text-lg text-black font-semibold">Add a Comment</h2>
   {/* Add Comment Form */}
   {currentVideo ? (
     <div className="mt-4">
@@ -623,16 +831,27 @@ export default function App() {
       ></textarea>
       <button
         onClick={handleAddComment}
-        className="mt-2 px-4 py-2 bg-blue-500 text-black rounded-md"
+        className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md"
       >
         Add Comment
       </button>
       <div className="mt-4 flex space-x-4">
+        {/* Like Button Placeholder */}
+        <button
+  onClick={handleLike}
+  className={`px-4 py-2 text-white rounded-md hover:bg-opacity-80 ${
+    currentVideo?.likes?.some((like) => like.username === (user?.displayName || user?.email))
+      ? "bg-red-500" // Red when liked
+      : "bg-blue-500" // Blue when not liked
+  }`}
+>
+  Like
+</button>
+
       
       </div>
 
       <p className="mt-2 text-gray-500">
-  
       </p>
 
       {/* Share Button */}
