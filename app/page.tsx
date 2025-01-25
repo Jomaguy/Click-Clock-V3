@@ -47,7 +47,7 @@ import {
   uploadBytes,
   getDownloadURL,
 } from "firebase/storage";
-import { doc, setDoc, updateDoc, arrayUnion, arrayRemove, getDoc,collection, getDocs } from "firebase/firestore";
+import { doc, setDoc, updateDoc, arrayUnion, arrayRemove, where, query, limit, orderBy, getDoc,collection, getDocs } from "firebase/firestore";
 import { auth, storage, db } from "./lib/firebase";
 
 // Define video categories (lowercase with hyphens to match rules)
@@ -83,6 +83,7 @@ export default function App() {
     uploaderId: string;
     comments: { username: string; text: string; timestamp: string }[];
     likes: { username: string; timestamp: string }[]; // Include likes field
+    category: string;
   }[]>([]);
   const [comment, setComment] = useState<string>(""); // Track the new comment
   const [currentVideo, setCurrentVideo] = useState<{
@@ -93,11 +94,16 @@ export default function App() {
     uploaderId: string;
     comments: { username: string; text: string; timestamp: string }[];
     likes: { username: string; timestamp: string }[]; // Include likes field
+    category: string;
   } | null>(null);
   const [videoName, setVideoName] = useState<string>(""); // Track user-defined video name
   // State for modal visibility
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   
+  // A state to keep track of the user preferences, and avoiding redundant calls to Firestore
+  const [userPreferences, setUserPreferences] = useState<string[]>([]);
+
+
   interface UserComment {
     videoName: string;
     content: string;
@@ -293,18 +299,155 @@ useEffect(() => {
           uploaderId: data.uploaderId, // Add uploaderId here
           comments: data.comments || [],
           likes: data.likes || [],
+          category: data.category || "Uncategorized",
         };
       });
-      setVideos(allVideos);
+      return allVideos;
     } catch (error) {
       console.error("Error fetching videos:", error);
+      return []; // Return an empty array in case of error
     }
   };
   
-  // The hook to call fetchvideos 
-  useEffect(() => {
-    fetchVideos();
-  }, []);
+
+// Function to fetch user preferences
+const fetchUserPreferences = async (userId: string) => {
+  try {
+    const userDocRef = doc(db, "users", userId);
+    const userDoc = await getDoc(userDocRef);
+
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      return userData.interests || [];
+    } else {
+      console.error("User document does not exist");
+      return [];
+    }
+  } catch (error) {
+    console.error("Error fetching user preferences:", error);
+    return [];
+  }
+};
+
+// Fetch preferences when the user logs in or updates them
+useEffect(() => {
+  const fetchPreferences = async () => {
+    if (user) {
+      const preferences = await fetchUserPreferences(user.uid);
+      setUserPreferences(preferences);
+    }
+  };
+
+  fetchPreferences();
+}, [user]);
+
+
+
+
+// Fetch and recommend videos for signed-in users
+const recommendVideos = async (userId: string) => {
+  try {
+    // Fetch user preferences
+    const userPreferences = await fetchUserPreferences(userId);
+    if (userPreferences.length === 0) {
+      console.warn("User has no preferences set.");
+      return []; // Optionally, fallback logic can also handle this case
+    }
+
+    const videosCollectionRef = collection(db, "videos");
+
+    // Fetch videos matching user preferences
+    const querySnapshot = await getDocs(
+      query(videosCollectionRef, where("category", "in", userPreferences))
+    );
+
+    const recommendedVideos = querySnapshot.docs
+      .map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          url: data.url,
+          name: data.name || "Unnamed Video",
+          uploaderName: data.uploaderName,
+          uploaderId: data.uploaderId,
+          comments: data.comments || [],
+          likes: data.likes || [],
+          category: data.category,
+        };
+      })
+      .sort((a, b) => b.likes.length - a.likes.length); // Sort by likes
+
+    // If no videos match preferences, fallback to trending videos
+    if (recommendedVideos.length === 0) {
+      console.warn("No recommended videos found. Falling back to trending videos.");
+
+      // Fetch trending videos
+      const trendingSnapshot = await getDocs(
+        query(videosCollectionRef, orderBy("likes", "desc"), limit(10)) // Top 10 trending videos
+      );
+
+      const trendingVideos = trendingSnapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          url: data.url,
+          name: data.name || "Unnamed Video",
+          uploaderName: data.uploaderName,
+          uploaderId: data.uploaderId,
+          comments: data.comments || [],
+          likes: data.likes || [],
+          category: data.category,
+        };
+      });
+
+      return trendingVideos;
+    }
+
+    return recommendedVideos; // Return recommended videos
+  } catch (error) {
+    console.error("Error recommending videos:", error);
+    return [];
+  }
+};
+
+
+useEffect(() => {
+  const loadVideos = async (currentUser: any) => {
+    try {
+      if (currentUser) {
+        // Signed-in user: fetch recommended videos
+        const userId = currentUser.uid;
+        const recommended = await recommendVideos(userId);
+        setVideos(recommended);
+      } else {
+        // Non-signed-in user: fetch general videos
+        const allVideos = await fetchVideos();
+        setVideos(allVideos);
+      }
+    } catch (error) {
+      console.error("Error loading videos:", error);
+    }
+  };
+
+  // Listen to auth state changes
+  const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    // Load videos based on the current auth state
+    loadVideos(currentUser);
+  });
+
+  return () => unsubscribe(); // Cleanup subscription on unmount
+}, []);
+
+
+
+
+
+
+
+
+
+
+
 
   // Handle user sign-up or sign-in
   const handleAuth = async () => {
@@ -484,19 +627,24 @@ useEffect(() => {
       alert("You must be logged in to update preferences.");
       return;
     }
-
+  
     try {
       const userDocRef = doc(db, "users", user.uid);
       await updateDoc(userDocRef, {
-        interests: selectedInterests,
+        interests: selectedInterests, // Save the updated preferences
       });
-
+  
       alert("Preferences updated successfully!");
+  
+      // Fetch updated recommendations based on new preferences
+      const updatedRecommendations = await recommendVideos(user.uid);
+      setVideos(updatedRecommendations); // Update the state with new recommendations
     } catch (error) {
       console.error("Error updating preferences:", error);
       alert("Failed to update preferences. Please try again.");
     }
   };
+  
 
   const handleLike = async () => {
     if (!user) {
