@@ -344,24 +344,41 @@ useEffect(() => {
 
 
 
-// Fetch and recommend videos for signed-in users
 const recommendVideos = async (userId: string) => {
   try {
     // Fetch user preferences
     const userPreferences = await fetchUserPreferences(userId);
-    if (userPreferences.length === 0) {
-      console.warn("User has no preferences set.");
-      return []; // Optionally, fallback logic can also handle this case
-    }
 
     const videosCollectionRef = collection(db, "videos");
 
-    // Fetch videos matching user preferences
-    const querySnapshot = await getDocs(
-      query(videosCollectionRef, where("category", "in", userPreferences))
-    );
+    let preferredVideos: any[] = [];
+    let nonPreferredVideos: any[] = [];
 
-    const recommendedVideos = querySnapshot.docs
+    // Fetch preferred videos if user has preferences
+    if (userPreferences.length > 0) {
+      const preferredVideosSnapshot = await getDocs(
+        query(videosCollectionRef, where("category", "in", userPreferences))
+      );
+
+      preferredVideos = preferredVideosSnapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          url: data.url,
+          name: data.name || "Unnamed Video",
+          uploaderName: data.uploaderName,
+          uploaderId: data.uploaderId,
+          comments: data.comments || [],
+          likes: data.likes || [],
+          category: data.category,
+        };
+      });
+    }
+
+    // Fetch all videos and filter out preferred ones if needed
+    const allVideosSnapshot = await getDocs(videosCollectionRef);
+
+    nonPreferredVideos = allVideosSnapshot.docs
       .map((doc) => {
         const data = doc.data();
         return {
@@ -375,40 +392,26 @@ const recommendVideos = async (userId: string) => {
           category: data.category,
         };
       })
-      .sort((a, b) => b.likes.length - a.likes.length); // Sort by likes
+      .filter((video) => !userPreferences.includes(video.category)); // Exclude preferred categories
 
-    // If no videos match preferences, fallback to trending videos
-    if (recommendedVideos.length === 0) {
-      console.warn("No recommended videos found. Falling back to trending videos.");
+    // Combine preferred and non-preferred videos
+    const allRecommendedVideos = [...preferredVideos, ...nonPreferredVideos];
 
-      // Fetch trending videos
-      const trendingSnapshot = await getDocs(
-        query(videosCollectionRef, orderBy("likes", "desc"), limit(10)) // Top 10 trending videos
-      );
+    // Sort combined videos by likes or any other criteria
+    const sortedVideos = allRecommendedVideos.sort(
+      (a, b) => b.likes.length - a.likes.length
+    );
 
-      const trendingVideos = trendingSnapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          url: data.url,
-          name: data.name || "Unnamed Video",
-          uploaderName: data.uploaderName,
-          uploaderId: data.uploaderId,
-          comments: data.comments || [],
-          likes: data.likes || [],
-          category: data.category,
-        };
-      });
-
-      return trendingVideos;
-    }
-
-    return recommendedVideos; // Return recommended videos
+    // Return limited results
+    return sortedVideos.slice(0, 10); // Limit to top 10 videos
   } catch (error) {
     console.error("Error recommending videos:", error);
     return [];
   }
 };
+
+
+
 
 
 useEffect(() => {
