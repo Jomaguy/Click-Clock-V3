@@ -452,6 +452,9 @@ const handleAddComment = async () => {
       comments: arrayUnion(commentDataForUser),
     });
 
+    // Update local userComments state immediately
+    setUserComments(prevComments => [...prevComments, commentDataForUser]);
+
     // Update the video document in the videos collection
     const videosCollectionRef = collection(db, "videos");
     const querySnapshot = await getDocs(videosCollectionRef);
@@ -487,9 +490,6 @@ const handleAddComment = async () => {
             : video
         )
       );
-
-      // Update the userComments state in the modal
-      setUserComments(prev => [...prev, commentDataForUser]);
 
       alert("Comment added successfully!");
     } else {
@@ -551,7 +551,7 @@ const handleLike = async () => {
         ))
       });
 
-      // Update local state
+      // Update local states
       setVideos(prevVideos => 
         prevVideos.map(video => 
           video.id === currentVideo.id 
@@ -574,6 +574,9 @@ const handleLike = async () => {
         } : null
       );
 
+      // Update likedVideos state for the modal
+      setLikedVideos(prev => prev.filter(video => video.videoName !== currentVideo.name));
+
       alert("Video unliked successfully!");
     } else {
       // Like: Add the like data
@@ -585,7 +588,7 @@ const handleLike = async () => {
         likes: arrayUnion(videoLikeData),
       });
 
-      // Update local state
+      // Update local states
       setVideos(prevVideos => 
         prevVideos.map(video => 
           video.id === currentVideo.id 
@@ -603,6 +606,9 @@ const handleLike = async () => {
           likes: [...prev.likes, videoLikeData]
         } : null
       );
+
+      // Update likedVideos state for the modal
+      setLikedVideos(prev => [...prev, { videoName: currentVideo.name }]);
 
       alert("Video liked successfully!");
     }
@@ -785,22 +791,23 @@ const fetchLikedVideos = async () => {
   };
 
   const handleUpdatePreferences = async () => {
-    if (!user) {
-      alert("You must be logged in to update preferences.");
-      return;
-    }
-  
+    if (!user) return;
+
     try {
       const userDocRef = doc(db, "users", user.uid);
       await updateDoc(userDocRef, {
-        interests: selectedInterests, // Save the updated preferences
+        interests: selectedInterests
       });
-  
+
+      // Update local state for user preferences
+      setUserPreferences(selectedInterests);
+
+      // Fetch new recommended videos based on updated preferences
+      const newRecommendedVideos = await recommendVideos(user.uid);
+      setVideos(newRecommendedVideos);
+
       alert("Preferences updated successfully!");
-  
-      // Fetch updated recommendations based on new preferences
-      const updatedRecommendations = await recommendVideos(user.uid);
-      setVideos(updatedRecommendations); // Update the state with new recommendations
+      toggleProfileModal(); // Close the modal after updating
     } catch (error) {
       console.error("Error updating preferences:", error);
       alert("Failed to update preferences. Please try again.");
@@ -1007,26 +1014,26 @@ const fetchLikedVideos = async () => {
             </div>
   
             {/* Column 3 */}
-            <div className="bg-gray-100 p-4 rounded-lg">
-            <h3 className="text-lg font-medium">Your Comments</h3>
-            {userComments.length > 0 ? (
-            <div className="mt-4 space-y-2 max-h-96 overflow-y-auto">
-              {userComments.map((comment, index) => (
-                <div key={index} className="p-2 border border-gray-300 text-black rounded-md">
-                  <p className="text-sm font-medium">
-              <strong>Video:</strong> {comment.videoName || "Unnamed Video"}
-                </p>
-                <p>{comment.content}</p>
-                <p className="text-xs text-gray-500">
-                  {new Date(comment.timestamp).toLocaleString()}
-                </p>
-              </div>
-            ))}
-         </div>
-          ) : (
-          <p className="text-gray-600 mt-4">You have not commented on any videos yet.</p>
-          )}
-          </div>
+            <div className="bg-gray-100 p-4 rounded-lg flex flex-col h-full">
+              <h3 className="text-lg font-medium mb-4">Your Comments</h3>
+              {userComments.length > 0 ? (
+                <div className="flex-grow overflow-y-auto space-y-2">
+                  {userComments.map((comment, index) => (
+                    <div key={index} className="p-2 border border-gray-300 text-black rounded-md">
+                      <p className="text-sm font-medium">
+                        <strong>Video:</strong> {comment.videoName}
+                      </p>
+                      <p><strong>Comment:</strong> {comment.content}</p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(comment.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-600">You have not commented on any videos yet.</p>
+              )}
+            </div>
   
             {/* Column 4 */}
             <div className="bg-gray-100 p-4 rounded-lg flex flex-col h-full">
@@ -1084,28 +1091,35 @@ const fetchLikedVideos = async () => {
       ref={(el) => {
         videoRefs.current[index] = el;
       }}
-      className="h-screen snap-start flex justify-center items-center relative"
+      className="h-screen w-full snap-start relative bg-black flex items-center justify-center"
     >
-      <div className="w-full h-full bg-black flex justify-center items-center relative">
+      <div className="relative flex items-center justify-center h-full w-full">
         <video
           id={`video-${index}`}
           src={video.url}
-          className="w-auto h-full object-contain cursor-pointer"
+          className="w-auto h-full object-contain mx-auto rounded-2xl"
           controls={false}
           onClick={() => togglePlayPause(index)}
         />
+
         {!isPlaying[index] && (
           <button
             onClick={() => togglePlayPause(index)}
             className="absolute inset-0 flex items-center justify-center"
           >
-            <div className="w-20 h-20 flex items-center justify-center rounded-full bg-black bg-opacity-50">
+            <div className="w-20 h-20 flex items-center justify-center rounded-full bg-black/50">
               <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
             </div>
           </button>
         )}
+
+        {/* Centered info overlay with larger text */}
+        <div className="absolute bottom-4 left-0 right-0 text-white z-10 text-center">
+          <h3 className="text-xl font-semibold">{video.name}</h3>
+          <p className="text-base opacity-80">@{video.uploaderName}</p>
+        </div>
       </div>
     </div>
   ))}
