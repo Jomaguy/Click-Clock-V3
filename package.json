@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@tailwindcss/forms": "^0.5.10",
     "date-fns": "^4.1.0",
     "firebase": "^11.2.0",
     "firebase-admin": "^13.0.2",
@@ -16,6 +17,7 @@
     "next": "15.1.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "tailwind-scrollbar-hide": "^2.0.0",
     "uuid": "^11.0.5"
   },
   "devDependencies": {

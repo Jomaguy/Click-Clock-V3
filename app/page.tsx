@@ -146,6 +146,31 @@ export default function App() {
 
 
 
+  // Add this function before the handleScroll function
+  const loadMoreVideos = async () => {
+    if (!user) {
+      // For non-signed in users
+      const allVideos = await fetchVideos();
+      setVideos(prev => {
+        // Combine existing videos with new ones, avoiding duplicates
+        const newVideos = allVideos.filter(
+          newVideo => !prev.some(existingVideo => existingVideo.id === newVideo.id)
+        );
+        return [...prev, ...newVideos];
+      });
+    } else {
+      // For signed-in users
+      const recommended = await recommendVideos(user.uid);
+      setVideos(prev => {
+        // Combine existing videos with new recommendations, avoiding duplicates
+        const newVideos = recommended.filter(
+          newVideo => !prev.some(existingVideo => existingVideo.id === newVideo.id)
+        );
+        return [...prev, ...newVideos];
+      });
+    }
+  };
+
   // Function to handle scrolling
   const handleScroll = () => {
     if (!videoRefs.current) return;
@@ -158,6 +183,11 @@ export default function App() {
           const visibleVideo = videos[index];
           if (visibleVideo && (!currentVideo || visibleVideo.url !== currentVideo.url)) {
             setCurrentVideo(visibleVideo);
+          }
+
+          // Load more videos when user reaches the last few videos
+          if (index >= videos.length - 3) {
+            loadMoreVideos();
           }
         }
       }
@@ -303,7 +333,8 @@ const recommendVideos = async (userId: string) => {
     );
 
     // Return limited results
-    return sortedVideos.slice(0, 10); // Limit to top 10 videos
+    return sortedVideos.slice(0, 100); // Limit to top 10 videos
+    // I want to modify this at some point, to allow an inifinite amount of videos to be recommended
   } catch (error) {
     console.error("Error recommending videos:", error);
     return [];
