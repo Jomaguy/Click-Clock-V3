@@ -118,7 +118,9 @@ export default function App() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null); // User information for the profile modal
 
   const videoRefs = useRef<(HTMLDivElement | null)[]>([]); // Track the positions of the videos and determine which video is being seen
-
+  
+  // Add this with your other state declarations at the top of the App component
+  const [isPlaying, setIsPlaying] = useState<{ [key: number]: boolean }>({});
 
 
 
@@ -371,6 +373,22 @@ useEffect(() => {
 
   return () => unsubscribe(); // Cleanup subscription on unmount
 }, []);
+
+
+const togglePlayPause = (index: number) => {
+  const videoElement = document.querySelector(`#video-${index}`) as HTMLVideoElement;
+  if (!videoElement) return;
+
+  if (videoElement.paused) {
+    videoElement.play();
+    setIsPlaying(prev => ({ ...prev, [index]: true }));
+  } else {
+    videoElement.pause();
+    setIsPlaying(prev => ({ ...prev, [index]: false }));
+  }
+};
+
+
 
 
 
@@ -960,16 +978,30 @@ useEffect(() => {
     <div
       key={index}
       ref={(el) => {
-        videoRefs.current[index] = el; // Assign the ref
+        videoRefs.current[index] = el;
       }}
-      className="h-screen snap-start flex justify-center items-center"
+      className="h-screen snap-start flex justify-center items-center relative"
     >
-      <div className="w-full h-full bg-black flex justify-center items-center">
+      <div className="w-full h-full bg-black flex justify-center items-center relative">
         <video
+          id={`video-${index}`}
           src={video.url}
-          controls
-          className="w-auto h-full object-contain"
+          className="w-auto h-full object-contain cursor-pointer"
+          controls={false}
+          onClick={() => togglePlayPause(index)}
         />
+        {!isPlaying[index] && (
+          <button
+            onClick={() => togglePlayPause(index)}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            <div className="w-20 h-20 flex items-center justify-center rounded-full bg-black bg-opacity-50">
+              <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </div>
+          </button>
+        )}
       </div>
     </div>
   ))}
