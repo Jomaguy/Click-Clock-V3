@@ -123,7 +123,10 @@ export default function App() {
   // Add this with your other state declarations at the top of the App component
   const [isPlaying, setIsPlaying] = useState<{ [key: number]: boolean }>({});
 
-
+  // State to track the videos the user has liked
+  const [likedVideos, setLikedVideos] = useState<{
+    videoName: string;
+  }[]>([]);
 
 
 
@@ -446,7 +449,7 @@ const handleAddComment = async () => {
 
     const userDocRef = doc(db, "users", user.uid);
     await updateDoc(userDocRef, {
-      comments: arrayUnion(commentDataForUser), // Add the new comment to the user's profile
+      comments: arrayUnion(commentDataForUser),
     });
 
     // Update the video document in the videos collection
@@ -458,44 +461,41 @@ const handleAddComment = async () => {
     querySnapshot.forEach((docSnapshot) => {
       const data = docSnapshot.data();
       if (data.url === currentVideo.url) {
-        videoDocRef = doc(db, "videos", docSnapshot.id); // Get the reference to the matching document
+        videoDocRef = doc(db, "videos", docSnapshot.id);
       }
     });
 
-
     if (videoDocRef) {
       await updateDoc(videoDocRef, {
-        comments: arrayUnion(commentDataForVideo), // Add the new comment to the video document
+        comments: arrayUnion(commentDataForVideo),
       });
 
       // Update the currentVideo state with the new comment
-    setCurrentVideo((prevVideo) => {
-      if (!prevVideo) return prevVideo;
-      return {
-        ...prevVideo,
-        comments: [...prevVideo.comments, commentDataForVideo],
-      };
-    });
+      setCurrentVideo((prevVideo) => {
+        if (!prevVideo) return prevVideo;
+        return {
+          ...prevVideo,
+          comments: [...prevVideo.comments, commentDataForVideo],
+        };
+      });
 
-    // Update the videos state to reflect the new comment
-    setVideos((prevVideos) =>
-      prevVideos.map((video) =>
-        video.url === currentVideo.url
-          ? { ...video, comments: [...video.comments, commentDataForVideo] }
-          : video
-      )
-    );
+      // Update the videos state to reflect the new comment
+      setVideos((prevVideos) =>
+        prevVideos.map((video) =>
+          video.url === currentVideo.url
+            ? { ...video, comments: [...video.comments, commentDataForVideo] }
+            : video
+        )
+      );
 
-
-
+      // Update the userComments state in the modal
+      setUserComments(prev => [...prev, commentDataForUser]);
 
       alert("Comment added successfully!");
     } else {
       console.error("No matching video found in the videos collection.");
       alert("Failed to update the video collection. Video not found.");
     }
-    
-    
 
     setComment(""); // Reset the comment field
   } catch (error) {
@@ -528,11 +528,6 @@ const handleLike = async () => {
     const userLikes = userDoc.exists() ? userDoc.data().likes || [] : [];
     const alreadyLiked = userLikes.some((like: { url: string }) => like.url === currentVideo.url);
 
-    if (alreadyLiked) {
-      alert("You have already liked this video.");
-      return;
-    }
-
     const timestamp = new Date().toISOString();
     const userLikeData = {
       timestamp,
@@ -545,40 +540,100 @@ const handleLike = async () => {
       username: user.displayName || user.email || "Anonymous",
     };
 
-    // Optimistically update local state for immediate feedback
-    setCurrentVideo((prevVideo) => {
-      if (!prevVideo) return prevVideo;
-      return {
-        ...prevVideo,
-        likes: [...prevVideo.likes, videoLikeData],
-      };
-    });
+    if (alreadyLiked) {
+      // Unlike: Remove the like data
+      await updateDoc(userDocRef, {
+        likes: arrayRemove(...userLikes.filter((like: { url: string }) => like.url === currentVideo.url))
+      });
+      await updateDoc(videoDocRef, {
+        likes: arrayRemove(...(videoDoc.data()?.likes || []).filter((like: { username: string }) => 
+          like.username === (user.displayName || user.email || "Anonymous")
+        ))
+      });
 
-    setVideos((prevVideos) =>
-      prevVideos.map((video) =>
-        video.id === currentVideo.id
-          ? {
-              ...video,
-              likes: [...video.likes, videoLikeData],
-            }
-          : video
-      )
-    );
+      // Update local state
+      setVideos(prevVideos => 
+        prevVideos.map(video => 
+          video.id === currentVideo.id 
+            ? {
+                ...video,
+                likes: video.likes.filter(like => 
+                  like.username !== (user.displayName || user.email || "Anonymous")
+                )
+              }
+            : video
+        )
+      );
 
-    // Update the user's likes in Firestore
-    await updateDoc(userDocRef, {
-      likes: arrayUnion(userLikeData),
-    });
+      setCurrentVideo(prev => 
+        prev ? {
+          ...prev,
+          likes: prev.likes.filter(like => 
+            like.username !== (user.displayName || user.email || "Anonymous")
+          )
+        } : null
+      );
 
-    // Update the video's likes in Firestore
-    await updateDoc(videoDocRef, {
-      likes: arrayUnion(videoLikeData),
-    });
+      alert("Video unliked successfully!");
+    } else {
+      // Like: Add the like data
+      await updateDoc(userDocRef, {
+        likes: arrayUnion(userLikeData),
+      });
 
-    alert("Video liked successfully!");
+      await updateDoc(videoDocRef, {
+        likes: arrayUnion(videoLikeData),
+      });
+
+      // Update local state
+      setVideos(prevVideos => 
+        prevVideos.map(video => 
+          video.id === currentVideo.id 
+            ? {
+                ...video,
+                likes: [...video.likes, videoLikeData]
+              }
+            : video
+        )
+      );
+
+      setCurrentVideo(prev => 
+        prev ? {
+          ...prev,
+          likes: [...prev.likes, videoLikeData]
+        } : null
+      );
+
+      alert("Video liked successfully!");
+    }
+
   } catch (error) {
-    console.error("Error liking video:", error);
-    alert("Failed to like video. Please try again.");
+    console.error("Error toggling like:", error);
+    alert("Failed to update like status. Please try again.");
+  }
+};
+
+
+
+
+// Add this function to your component
+const handleShare = async (video: any) => {
+  try {
+    if (navigator.share) {
+      // Use Web Share API if available
+      await navigator.share({
+        title: video.name || 'Check out this video!',
+        text: `Watch this video from ${video.uploaderName}`,
+        url: window.location.href
+      });
+    } else {
+      // Fallback: Copy URL to clipboard
+      await navigator.clipboard.writeText(window.location.href);
+      alert('Link copied to clipboard!');
+    }
+  } catch (error) {
+    console.error('Error sharing:', error);
+    alert('Failed to share video');
   }
 };
 
@@ -651,6 +706,22 @@ useEffect(() => {
       console.error("Error fetching user info:", error);
     }
   };
+  // Add this function to fetch liked videos
+const fetchLikedVideos = async () => {
+  if (!user) return;
+  try {
+    const userDocRef = doc(db, "users", user.uid);
+    const userDoc = await getDoc(userDocRef);
+
+    if (userDoc.exists()) {
+      const data = userDoc.data();
+      setLikedVideos(data.likes || []);
+    }
+  } catch (error) {
+    console.error("Error fetching liked videos:", error);
+  }
+};
+
 
   const fetchUserComments = async () => {
     if (!user) {
@@ -698,6 +769,7 @@ useEffect(() => {
       fetchUserComments();
       fetchUserVideos();
       fetchUserInfo();
+      fetchLikedVideos(); // Add this line
 
     }
   }, [user]);
@@ -916,10 +988,22 @@ useEffect(() => {
             </div>
   
             {/* Column 2: Liked Videos */}
-            <div className="bg-gray-100 p-4 rounded-lg">
-            <button className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">
-              Access Your liked Videos
-            </button>
+            <div className="bg-gray-100 p-4 rounded-lg flex flex-col h-full">
+              <h3 className="text-lg font-medium">Liked Videos</h3>
+              <button className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">
+                Access Your Liked Videos
+              </button>
+              {likedVideos.length > 0 ? (
+                <div className="mt-4 space-y-2 flex-grow overflow-y-auto">
+                  {likedVideos.map((video, index) => (
+                    <div key={index} className="p-2 border border-gray-300 text-black rounded-md">
+                      <p className="text-sm font-medium">{video.videoName}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-600 mt-4">You haven't liked any videos yet.</p>
+              )}
             </div>
   
             {/* Column 3 */}
@@ -1110,10 +1194,7 @@ useEffect(() => {
 
       {/* Share Button */}
   <button
-    onClick={() => {
-      // Placeholder function for share button
-      alert("Share functionality coming soon!");
-    }}
+    onClick={() => currentVideo && handleShare(currentVideo)}
     className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
   >
     Share
@@ -1284,3 +1365,5 @@ useEffect(() => {
     </main>
   );
 }
+
+
