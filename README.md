@@ -82,5 +82,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Contact
 
-Jonathan Mahrt - [@YourTwitter](https://twitter.com/YourTwitter)
+Jonathan Mahrt - [@MyLinkedin]((https://www.linkedin.com/in/jonathan-mahrt-guyou/))
 Project Link: [https://github.com/Jomaguy/Click_Clock](https://github.com/Jomaguy/Click_Clock)
