@@ -1,29 +1,36 @@
 /*
 Compared to the user interfaces the code is divided in the following way:
-1.Imports
-2.Left Column
-3.Right Column 
-   3.1 First Row
-   Display comments(list functions)
-   3.2 Second Row
-   Add comments
-   Like(Coming)
-   Share
-   3.3 Third Row
-   Sign Up/Sign In
-      Profile
-          Modal
-            Column1 -- User Information
-            Column2 -- Liked Videos (Coming)
-            Column3 -- Comments (Coming)
-            Column4 -- Uploaded Videos(Coming)
-      Sign Out
-      Upload Video
-          Video Name
-          Category Selector
-          Upload Video
 
-  4. Front code
+1. Imports and interfaces
+
+This first part contains all the typescript and functions
+
+2. Left column
+2.1 Scrolling
+2.2 Fetching videos for non signed in users
+2.3 Fetch user preferences to determine which videos to show the signed in user
+2.4 Fetch videos for signed in users
+2.5. useEffect hook to determine what kind of videos to show the user
+
+3. Right column
+3.1 Row 1 =  Display Comments
+
+3.2 Row 2 = Add comments
+	3.2.1 Like a video
+	3.2.2 Share a video
+
+3.3 Row 3 = Sign up/Sign in
+	3.3.1 Profile button 
+		3.3.1.1 Modal
+			3.3.1.1 Column 1 = User information 
+			3.3.1.2 Column 2 = Liked videos
+			3.3.1.3 Column 3 = User comments
+			3.3.1.4 Column 4 = Uploaded videos
+	3.3.2 Sign out button
+	3.3.3. Upload video button
+		
+	
+This second part contains the html, css and js
      
 
 
@@ -103,6 +110,19 @@ export default function App() {
   // A state to keep track of the user preferences, and avoiding redundant calls to Firestore
   const [userPreferences, setUserPreferences] = useState<string[]>([]);
 
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([]); // Fetch the users selected interests
+
+  const [userComments, setUserComments] = useState<UserComment[]>([]); // Fetch the comments of the user signed in
+  const [userVideos, setUserVideos] = useState<UploadedVideo[]>([]); // Fetch the name and category of the videos the user uploaded
+ 
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null); // User information for the profile modal
+
+  const videoRefs = useRef<(HTMLDivElement | null)[]>([]); // Track the positions of the videos and determine which video is being seen
+
+
+
+
+
 
   interface UserComment {
     videoName: string;
@@ -125,37 +145,7 @@ export default function App() {
   }
 
 
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([]); // Fetch the users selected interests
 
-  const [userComments, setUserComments] = useState<UserComment[]>([]); // Fetch the comments of the user signed in
-  const [userVideos, setUserVideos] = useState<UploadedVideo[]>([]); // Fetch the name and category of the videos the user uploaded
- 
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null); // User information for the profile modal
-
-  const videoRefs = useRef<(HTMLDivElement | null)[]>([]); // Track the positions of the videos and determine which video is being seen
-
-
-
-  // Monitor authentication state
-useEffect(() => {
-  const unsubscribe = onAuthStateChanged(auth, async (user) => {
-    setUser(user || null); // Update user state when auth state changes
-  });
-
-  // Cleanup subscription on component unmount
-  return () => unsubscribe();
-}, []);
-
-
-
-
-
-    // Function to toggle the profile modal
-    const toggleProfileModal = () => {
-      setIsProfileModalOpen(!isProfileModalOpen);
-    };
-
-  
   // Function to handle scrolling
   const handleScroll = () => {
     if (!videoRefs.current) return;
@@ -188,101 +178,11 @@ useEffect(() => {
       }
     };
   }, [videos, currentVideo]);
-  
-
-
-  // Function to add new comment  
-  const handleAddComment = async () => {
-    if (!user) {
-      alert("You must be logged in to comment.");
-      return;
-    }
-  
-    if (!currentVideo) {
-      alert("No video is currently visible.");
-      return;
-    }
-  
-    if (!comment.trim()) {
-      alert("Comment cannot be empty.");
-      return;
-    }
-  
-    try {
-      const timestamp = new Date().toISOString();
-      const commentDataForUser = {
-        content: comment.trim(),
-        videoName: currentVideo.name || "Unnamed Video",
-        url: currentVideo.url,
-        timestamp,
-      };
-  
-      const commentDataForVideo = {
-        username: user.displayName || name || user.email || "Anonymous",
-        text: comment.trim(),
-        timestamp,
-      };
-
-      const userDocRef = doc(db, "users", user.uid);
-      await updateDoc(userDocRef, {
-        comments: arrayUnion(commentDataForUser), // Add the new comment to the user's profile
-      });
-  
-      // Update the video document in the videos collection
-      const videosCollectionRef = collection(db, "videos");
-      const querySnapshot = await getDocs(videosCollectionRef);
-  
-      let videoDocRef = null;
-  
-      querySnapshot.forEach((docSnapshot) => {
-        const data = docSnapshot.data();
-        if (data.url === currentVideo.url) {
-          videoDocRef = doc(db, "videos", docSnapshot.id); // Get the reference to the matching document
-        }
-      });
-
-  
-      if (videoDocRef) {
-        await updateDoc(videoDocRef, {
-          comments: arrayUnion(commentDataForVideo), // Add the new comment to the video document
-        });
-
-        // Update the currentVideo state with the new comment
-      setCurrentVideo((prevVideo) => {
-        if (!prevVideo) return prevVideo;
-        return {
-          ...prevVideo,
-          comments: [...prevVideo.comments, commentDataForVideo],
-        };
-      });
-
-      // Update the videos state to reflect the new comment
-      setVideos((prevVideos) =>
-        prevVideos.map((video) =>
-          video.url === currentVideo.url
-            ? { ...video, comments: [...video.comments, commentDataForVideo] }
-            : video
-        )
-      );
 
 
 
 
-        alert("Comment added successfully!");
-      } else {
-        console.error("No matching video found in the videos collection.");
-        alert("Failed to update the video collection. Video not found.");
-      }
-      
-      
 
-      setComment(""); // Reset the comment field
-    } catch (error) {
-      console.error("Error adding comment:", error);
-      alert("Failed to add comment. Please try again.");
-    }
-  };
-  
   // Function to fetch videos from the videos collection
   const fetchVideos = async () => {
     try {
@@ -443,47 +343,330 @@ useEffect(() => {
 
 
 
+// Function to add new comment  
+const handleAddComment = async () => {
+  if (!user) {
+    alert("You must be logged in to comment.");
+    return;
+  }
+
+  if (!currentVideo) {
+    alert("No video is currently visible.");
+    return;
+  }
+
+  if (!comment.trim()) {
+    alert("Comment cannot be empty.");
+    return;
+  }
+
+  try {
+    const timestamp = new Date().toISOString();
+    const commentDataForUser = {
+      content: comment.trim(),
+      videoName: currentVideo.name || "Unnamed Video",
+      url: currentVideo.url,
+      timestamp,
+    };
+
+    const commentDataForVideo = {
+      username: user.displayName || name || user.email || "Anonymous",
+      text: comment.trim(),
+      timestamp,
+    };
+
+    const userDocRef = doc(db, "users", user.uid);
+    await updateDoc(userDocRef, {
+      comments: arrayUnion(commentDataForUser), // Add the new comment to the user's profile
+    });
+
+    // Update the video document in the videos collection
+    const videosCollectionRef = collection(db, "videos");
+    const querySnapshot = await getDocs(videosCollectionRef);
+
+    let videoDocRef = null;
+
+    querySnapshot.forEach((docSnapshot) => {
+      const data = docSnapshot.data();
+      if (data.url === currentVideo.url) {
+        videoDocRef = doc(db, "videos", docSnapshot.id); // Get the reference to the matching document
+      }
+    });
+
+
+    if (videoDocRef) {
+      await updateDoc(videoDocRef, {
+        comments: arrayUnion(commentDataForVideo), // Add the new comment to the video document
+      });
+
+      // Update the currentVideo state with the new comment
+    setCurrentVideo((prevVideo) => {
+      if (!prevVideo) return prevVideo;
+      return {
+        ...prevVideo,
+        comments: [...prevVideo.comments, commentDataForVideo],
+      };
+    });
+
+    // Update the videos state to reflect the new comment
+    setVideos((prevVideos) =>
+      prevVideos.map((video) =>
+        video.url === currentVideo.url
+          ? { ...video, comments: [...video.comments, commentDataForVideo] }
+          : video
+      )
+    );
 
 
 
 
+      alert("Comment added successfully!");
+    } else {
+      console.error("No matching video found in the videos collection.");
+      alert("Failed to update the video collection. Video not found.");
+    }
+    
+    
+
+    setComment(""); // Reset the comment field
+  } catch (error) {
+    console.error("Error adding comment:", error);
+    alert("Failed to add comment. Please try again.");
+  }
+};
 
 
 
 
+const handleLike = async () => {
+  if (!user) {
+    alert("You must be logged in to like a video.");
+    return;
+  }
 
-  // Handle user sign-up or sign-in
-  const handleAuth = async () => {
+  if (!currentVideo) {
+    alert("No video selected.");
+    return;
+  }
+
+  try {
+    const userDocRef = doc(db, "users", user.uid);
+    const videoDocRef = doc(db, "videos", currentVideo.id);
+
+    const userDoc = await getDoc(userDocRef);
+    const videoDoc = await getDoc(videoDocRef);
+
+    const userLikes = userDoc.exists() ? userDoc.data().likes || [] : [];
+    const alreadyLiked = userLikes.some((like: { url: string }) => like.url === currentVideo.url);
+
+    if (alreadyLiked) {
+      alert("You have already liked this video.");
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
+    const userLikeData = {
+      timestamp,
+      url: currentVideo.url,
+      videoName: currentVideo.name,
+    };
+
+    const videoLikeData = {
+      timestamp,
+      username: user.displayName || user.email || "Anonymous",
+    };
+
+    // Optimistically update local state for immediate feedback
+    setCurrentVideo((prevVideo) => {
+      if (!prevVideo) return prevVideo;
+      return {
+        ...prevVideo,
+        likes: [...prevVideo.likes, videoLikeData],
+      };
+    });
+
+    setVideos((prevVideos) =>
+      prevVideos.map((video) =>
+        video.id === currentVideo.id
+          ? {
+              ...video,
+              likes: [...video.likes, videoLikeData],
+            }
+          : video
+      )
+    );
+
+    // Update the user's likes in Firestore
+    await updateDoc(userDocRef, {
+      likes: arrayUnion(userLikeData),
+    });
+
+    // Update the video's likes in Firestore
+    await updateDoc(videoDocRef, {
+      likes: arrayUnion(videoLikeData),
+    });
+
+    alert("Video liked successfully!");
+  } catch (error) {
+    console.error("Error liking video:", error);
+    alert("Failed to like video. Please try again.");
+  }
+};
+
+
+// Handle user sign-up or sign-in
+const handleAuth = async () => {
+  try {
+    if (isSignUp) {
+      if (selectedCategories.length === 0) {
+        alert("Please select at least one category.");
+        return;
+      }
+
+      const { user } = await createUserWithEmailAndPassword(auth, email, password);
+      const userDoc = doc(db, "users", user.uid);
+      await setDoc(userDoc, {
+        name,
+        username,
+        email,
+        dob,
+        interests: selectedCategories, // Save selected categories here
+        videos: [],
+      });
+      alert("Sign-up successful!");
+    } else {
+      await signInWithEmailAndPassword(auth, email, password);
+      alert("Sign-in successful!");
+    }
+  } catch (error) {
+    console.error(error);
+    alert(error instanceof Error ? error.message : "An unknown error occurred");
+  }
+};
+
+
+
+  // Monitor authentication state
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    setUser(user || null); // Update user state when auth state changes
+  });
+
+  // Cleanup subscription on component unmount
+  return () => unsubscribe();
+}, []);
+
+
+
+  // Function to toggle the profile modal
+  const toggleProfileModal = () => {
+      setIsProfileModalOpen(!isProfileModalOpen);
+  };
+
+
+  const fetchUserInfo = async () => {
+    if (!user) {
+      console.error("User is not logged in.");
+      return;
+    }
     try {
-      if (isSignUp) {
-        if (selectedCategories.length === 0) {
-          alert("Please select at least one category.");
-          return;
-        }
-  
-        const { user } = await createUserWithEmailAndPassword(auth, email, password);
-        const userDoc = doc(db, "users", user.uid);
-        await setDoc(userDoc, {
-          name,
-          username,
-          email,
-          dob,
-          interests: selectedCategories, // Save selected categories here
-          videos: [],
-        });
-        alert("Sign-up successful!");
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-        alert("Sign-in successful!");
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setUserInfo(data);
+        setSelectedInterests(data.interests || []);
       }
     } catch (error) {
-      console.error(error);
-      alert(error instanceof Error ? error.message : "An unknown error occurred");
+      console.error("Error fetching user info:", error);
+    }
+  };
+
+  const fetchUserComments = async () => {
+    if (!user) {
+      console.error("User is not logged in.");
+      return;
+    }
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setUserComments(data.comments || []);
+      }
+    } catch (error) {
+      console.error("Error fetching user comments:", error);
     }
   };
 
   
+  const fetchUserVideos = async () => {
+    if (!user) {
+      console.error("User is not logged in.");
+      return;
+    }
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setUserVideos(data.videos || []);
+      }
+    } catch (error) {
+      console.error("Error fetching user videos:", error);
+    }
+  };
+
+
+
+
+
+  useEffect(() => {
+    if (user) {
+      fetchUserComments();
+      fetchUserVideos();
+      fetchUserInfo();
+
+    }
+  }, [user]);
   
+
+  // The code below manages user preferences that can be changed from the user's profile
+  const handleInterestChange = (interest: string) => {
+    setSelectedInterests((prevInterests) =>
+      prevInterests.includes(interest)
+        ? prevInterests.filter((i) => i !== interest)
+        : [...prevInterests, interest]
+    );
+  };
+
+  const handleUpdatePreferences = async () => {
+    if (!user) {
+      alert("You must be logged in to update preferences.");
+      return;
+    }
+  
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      await updateDoc(userDocRef, {
+        interests: selectedInterests, // Save the updated preferences
+      });
+  
+      alert("Preferences updated successfully!");
+  
+      // Fetch updated recommendations based on new preferences
+      const updatedRecommendations = await recommendVideos(user.uid);
+      setVideos(updatedRecommendations); // Update the state with new recommendations
+    } catch (error) {
+      console.error("Error updating preferences:", error);
+      alert("Failed to update preferences. Please try again.");
+    }
+  };
+  
+
 
   // Handle video upload
   const handleVideoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -552,177 +735,14 @@ useEffect(() => {
     }
   };
 
-  const fetchUserComments = async () => {
-    if (!user) {
-      console.error("User is not logged in.");
-      return;
-    }
-    try {
-      const userDocRef = doc(db, "users", user.uid);
-      const userDoc = await getDoc(userDocRef);
-
-      if (userDoc.exists()) {
-        const data = userDoc.data();
-        setUserComments(data.comments || []);
-      }
-    } catch (error) {
-      console.error("Error fetching user comments:", error);
-    }
-  };
-
-  const fetchUserVideos = async () => {
-    if (!user) {
-      console.error("User is not logged in.");
-      return;
-    }
-    try {
-      const userDocRef = doc(db, "users", user.uid);
-      const userDoc = await getDoc(userDocRef);
-
-      if (userDoc.exists()) {
-        const data = userDoc.data();
-        setUserVideos(data.videos || []);
-      }
-    } catch (error) {
-      console.error("Error fetching user videos:", error);
-    }
-  };
-
-  const fetchUserInfo = async () => {
-    if (!user) {
-      console.error("User is not logged in.");
-      return;
-    }
-    try {
-      const userDocRef = doc(db, "users", user.uid);
-      const userDoc = await getDoc(userDocRef);
-
-      if (userDoc.exists()) {
-        const data = userDoc.data();
-        setUserInfo(data);
-        setSelectedInterests(data.interests || []);
-      }
-    } catch (error) {
-      console.error("Error fetching user info:", error);
-    }
-  };
-
-
-  useEffect(() => {
-    if (user) {
-      fetchUserComments();
-      fetchUserVideos();
-      fetchUserInfo();
-
-    }
-  }, [user]);
-
-  const handleInterestChange = (interest: string) => {
-    setSelectedInterests((prevInterests) =>
-      prevInterests.includes(interest)
-        ? prevInterests.filter((i) => i !== interest)
-        : [...prevInterests, interest]
-    );
-  };
-
-  const handleUpdatePreferences = async () => {
-    if (!user) {
-      alert("You must be logged in to update preferences.");
-      return;
-    }
   
-    try {
-      const userDocRef = doc(db, "users", user.uid);
-      await updateDoc(userDocRef, {
-        interests: selectedInterests, // Save the updated preferences
-      });
   
-      alert("Preferences updated successfully!");
-  
-      // Fetch updated recommendations based on new preferences
-      const updatedRecommendations = await recommendVideos(user.uid);
-      setVideos(updatedRecommendations); // Update the state with new recommendations
-    } catch (error) {
-      console.error("Error updating preferences:", error);
-      alert("Failed to update preferences. Please try again.");
-    }
-  };
   
 
-  const handleLike = async () => {
-    if (!user) {
-      alert("You must be logged in to like a video.");
-      return;
-    }
   
-    if (!currentVideo) {
-      alert("No video selected.");
-      return;
-    }
   
-    try {
-      const userDocRef = doc(db, "users", user.uid);
-      const videoDocRef = doc(db, "videos", currentVideo.id);
+
   
-      const userDoc = await getDoc(userDocRef);
-      const videoDoc = await getDoc(videoDocRef);
-  
-      const userLikes = userDoc.exists() ? userDoc.data().likes || [] : [];
-      const alreadyLiked = userLikes.some((like: { url: string }) => like.url === currentVideo.url);
-  
-      if (alreadyLiked) {
-        alert("You have already liked this video.");
-        return;
-      }
-  
-      const timestamp = new Date().toISOString();
-      const userLikeData = {
-        timestamp,
-        url: currentVideo.url,
-        videoName: currentVideo.name,
-      };
-  
-      const videoLikeData = {
-        timestamp,
-        username: user.displayName || user.email || "Anonymous",
-      };
-  
-      // Optimistically update local state for immediate feedback
-      setCurrentVideo((prevVideo) => {
-        if (!prevVideo) return prevVideo;
-        return {
-          ...prevVideo,
-          likes: [...prevVideo.likes, videoLikeData],
-        };
-      });
-  
-      setVideos((prevVideos) =>
-        prevVideos.map((video) =>
-          video.id === currentVideo.id
-            ? {
-                ...video,
-                likes: [...video.likes, videoLikeData],
-              }
-            : video
-        )
-      );
-  
-      // Update the user's likes in Firestore
-      await updateDoc(userDocRef, {
-        likes: arrayUnion(userLikeData),
-      });
-  
-      // Update the video's likes in Firestore
-      await updateDoc(videoDocRef, {
-        likes: arrayUnion(videoLikeData),
-      });
-  
-      alert("Video liked successfully!");
-    } catch (error) {
-      console.error("Error liking video:", error);
-      alert("Failed to like video. Please try again.");
-    }
-  };
   
   
   
