@@ -94,14 +94,15 @@ export default function App() {
   }[]>([]);
   const [comment, setComment] = useState<string>(""); // Track the new comment
   const [currentVideo, setCurrentVideo] = useState<{
-    id:string,
+    id: string;
     url: string;
     name: string;
     uploaderName: string;
     uploaderId: string;
     comments: { username: string; text: string; timestamp: string }[];
-    likes: { username: string; timestamp: string }[]; // Include likes field
+    likes: { username: string; timestamp: string }[];
     category: string;
+    isPlaying?: boolean;
   } | null>(null);
   const [videoName, setVideoName] = useState<string>(""); // Track user-defined video name
   // State for modal visibility
@@ -173,23 +174,28 @@ export default function App() {
     }
   };
 
-  // Function to handle scrolling
+  // Update handleScroll function
   const handleScroll = () => {
     if (!videoRefs.current) return;
-  
+
     videoRefs.current.forEach((ref, index) => {
       if (ref) {
         const rect = ref.getBoundingClientRect();
+        const videoElement = document.querySelector(`#video-${index}`) as HTMLVideoElement;
+        
+        // Check if video is fully visible in the viewport
         if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
-          // Update `currentVideo` when the video is fully visible in the viewport
-          const visibleVideo = videos[index];
-          if (visibleVideo && (!currentVideo || visibleVideo.url !== currentVideo.url)) {
-            setCurrentVideo(visibleVideo);
+          // Video is visible - play it and update states
+          if (videoElement && videoElement.paused) {
+            videoElement.play();
+            setIsPlaying(prev => ({ ...prev, [index]: true }));
+            setCurrentVideo({ ...videos[index], isPlaying: true });
           }
-
-          // Load more videos when user reaches the last few videos
-          if (index >= videos.length - 3) {
-            loadMoreVideos();
+        } else {
+          // Video is not visible - pause it
+          if (videoElement && !videoElement.paused) {
+            videoElement.pause();
+            setIsPlaying(prev => ({ ...prev, [index]: false }));
           }
         }
       }
@@ -379,12 +385,26 @@ const togglePlayPause = (index: number) => {
   const videoElement = document.querySelector(`#video-${index}`) as HTMLVideoElement;
   if (!videoElement) return;
 
+  // Pause all other videos first
+  videos.forEach((_, idx) => {
+    if (idx !== index) {
+      const otherVideo = document.querySelector(`#video-${idx}`) as HTMLVideoElement;
+      if (otherVideo) {
+        otherVideo.pause();
+        setIsPlaying(prev => ({ ...prev, [idx]: false }));
+      }
+    }
+  });
+
+  // Toggle the clicked video
   if (videoElement.paused) {
     videoElement.play();
     setIsPlaying(prev => ({ ...prev, [index]: true }));
+    setCurrentVideo({ ...videos[index], isPlaying: true });
   } else {
     videoElement.pause();
     setIsPlaying(prev => ({ ...prev, [index]: false }));
+    setCurrentVideo({ ...videos[index], isPlaying: false });
   }
 };
 
