@@ -1038,7 +1038,7 @@ export default function App() {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div
-          className="bg-white p-8 rounded-lg shadow-lg"
+          className="bg-black p-8 rounded-lg shadow-lg relative border border-white"
           style={{
             width: "100%",
             height: "100%",
@@ -1046,7 +1046,28 @@ export default function App() {
             maxHeight: "90%",
           }}
         >
-          <h2 className="text-2xl font-semibold mb-4">Profile</h2>
+          {/* Close Button */}
+          <button
+            onClick={toggleProfileModal}
+            className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+
+          <h2 className="text-2xl font-semibold mb-4 text-white">Profile</h2>
 
           {/* 4 Columns Grid Layout */}
           <div
@@ -1056,117 +1077,244 @@ export default function App() {
             }}
           >
             {/* Column 1: User Information */}
-            <div className="bg-gray-100 p-4 rounded-lg">
-              <h3 className="text-lg font-medium">User Information</h3>
+            <div className="bg-gray-900 p-4 rounded-xl border border-white">
+              <h3 className="text-lg font-medium text-white mb-4">User Information</h3>
               {userInfo ? (
-                <div className="mt-4">
-                  <p className="text-gray-600"><strong>Name:</strong> {userInfo.name || "N/A"}</p>
-                  <p className="text-gray-600"><strong>Username:</strong> {userInfo.username || "N/A"}</p>
-                  <p className="text-gray-600"><strong>Email:</strong> {user ? user.email : "N/A"}</p>
-                  <p className="text-gray-600"><strong>Date of Birth:</strong> {userInfo.dob || "N/A"}</p>
-                  <div className="text-gray-600">
-                    <strong>Interests:</strong>
-                    <div className="mt-2">
+                <div className="mt-4 space-y-4">
+                  <p className="text-white">
+                    <strong className="text-white opacity-80">Name:</strong> {userInfo.name || "N/A"}
+                  </p>
+                  <p className="text-white">
+                    <strong className="text-white opacity-80">Username:</strong> {userInfo.username || "N/A"}
+                  </p>
+                  <p className="text-white">
+                    <strong className="text-white opacity-80">Email:</strong> {user ? user.email : "N/A"}
+                  </p>
+                  <p className="text-white">
+                    <strong className="text-white opacity-80">Date of Birth:</strong> {userInfo.dob || "N/A"}
+                  </p>
+                  <div className="text-white">
+                    <strong className="text-white opacity-80">Interests:</strong>
+                    <div className="mt-2 space-y-2">
                       {VideoCategories.map((interest) => (
-                        <div key={interest} className="flex items-center">
+                        <div key={interest} className="flex items-center space-x-2">
                           <input
                             type="checkbox"
                             id={interest}
                             checked={selectedInterests.includes(interest)}
                             onChange={() => handleInterestChange(interest)}
-                            className="mr-2"
+                            className="w-4 h-4 bg-gray-800 border-gray-700 rounded text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900"
                           />
-                          <label htmlFor={interest}>{interest}</label>
+                          <label htmlFor={interest} className="text-white">
+                            {interest.replace("-", " ")}
+                          </label>
                         </div>
                       ))}
                     </div>
                     <button
                       onClick={handleUpdatePreferences}
-                      className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                      className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors w-full"
                     >
                       Update Preferences
                     </button>
                   </div>
                 </div>
               ) : (
-                <p className="text-gray-600 mt-4">Loading user information...</p>
+                <p className="text-white opacity-60 mt-4">Loading user information...</p>
               )}
             </div>
 
             {/* Column 2: Liked Videos */}
-            <div className="bg-gray-100 p-4 rounded-lg flex flex-col h-full">
-              <h3 className="text-lg font-medium">Liked Videos</h3>
-              <button className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">
-                Access Your Liked Videos
-              </button>
+            <div className="bg-gray-900 p-4 rounded-xl border border-white">
+              <h3 className="text-lg font-medium text-white mb-4">Liked Videos</h3>
               {likedVideos.length > 0 ? (
                 <div className="mt-4 space-y-2 flex-grow overflow-y-auto">
                   {likedVideos.map((video, index) => (
-                    <div key={index} className="p-2 border border-gray-300 text-black rounded-md">
-                      <p className="text-sm font-medium">{video.videoName}</p>
+                    <div 
+                      key={index} 
+                      className="p-4 bg-gray-800 border border-gray-700 text-white rounded-xl hover:border-gray-600 transition-colors"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="flex-shrink-0">
+                          <svg 
+                            className="w-5 h-5 text-red-500" 
+                            fill="currentColor" 
+                            viewBox="0 0 20 20"
+                          >
+                            <path 
+                              fillRule="evenodd" 
+                              d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" 
+                              clipRule="evenodd" 
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white truncate">
+                            {video.videoName}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   ))}
+                  <button
+                    onClick={() => alert('Feature coming soon!')}
+                    className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                  >
+                    See Your Liked Videos
+                  </button>
                 </div>
               ) : (
-                <p className="text-gray-600 mt-4">You haven't liked any videos yet.</p>
+                <div className="mt-4 p-6 bg-gray-800 rounded-xl border border-gray-700 text-center">
+                  <svg 
+                    className="mx-auto h-12 w-12 text-white opacity-60" 
+                    fill="currentColor" 
+                    viewBox="0 0 20 20"
+                  >
+                    <path 
+                      fillRule="evenodd" 
+                      d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" 
+                      clipRule="evenodd" 
+                    />
+                  </svg>
+                  <p className="mt-2 text-white opacity-60">No liked videos yet</p>
+                  <button
+                    onClick={() => alert('Feature coming soon!')}
+                    className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                  >
+                    See Your Liked Videos
+                  </button>
+                </div>
               )}
             </div>
 
             {/* Column 3: User Comments */}
-            <div className="bg-gray-100 p-4 rounded-lg flex flex-col h-full">
-              <h3 className="text-lg font-medium mb-4">Your Comments</h3>
+            <div className="bg-gray-900 p-4 rounded-xl border border-white">
+              <h3 className="text-lg font-medium text-white mb-4">Your Comments</h3>
               {userComments.length > 0 ? (
                 <div className="flex-grow overflow-y-auto space-y-2">
                   {userComments.map((comment, index) => (
-                    <div key={index} className="p-2 border border-gray-300 text-black rounded-md">
-                      <p className="text-sm font-medium">
-                        <strong>Video:</strong> {comment.videoName}
-                      </p>
-                      <p><strong>Comment:</strong> {comment.content}</p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(comment.timestamp).toLocaleString()}
-                      </p>
+                    <div 
+                      key={index} 
+                      className="p-4 bg-gray-800 border border-gray-700 rounded-xl hover:border-gray-600 transition-colors"
+                    >
+                      <div className="flex flex-col space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <svg 
+                            className="w-4 h-4 text-white opacity-60" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                          >
+                            <path 
+                              strokeLinecap="round" 
+                              strokeLinejoin="round" 
+                              strokeWidth="2" 
+                              d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
+                            />
+                          </svg>
+                          <p className="text-sm font-semibold text-white">
+                            {comment.videoName}
+                          </p>
+                        </div>
+                        <p className="text-white pl-6">
+                          {comment.content}
+                        </p>
+                        <p className="text-xs text-white opacity-60 pl-6">
+                          {new Date(comment.timestamp).toLocaleString()}
+                        </p>
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-600">You have not commented on any videos yet.</p>
+                <div className="mt-4 p-6 bg-gray-800 rounded-xl border border-gray-700 text-center">
+                  <svg 
+                    className="mx-auto h-12 w-12 text-white opacity-60" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth="2" 
+                      d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                    />
+                  </svg>
+                  <p className="mt-2 text-white opacity-60">No comments yet</p>
+                </div>
               )}
             </div>
 
             {/* Column 4: Uploaded Videos */}
-            <div className="bg-gray-100 p-4 rounded-lg flex flex-col h-full">
-              <h3 className="text-lg font-medium">Your Uploaded Videos</h3>
-              <button className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">
-                Access Your Uploaded Videos
-              </button>
+            <div className="bg-gray-900 p-4 rounded-xl border border-white">
+              <h3 className="text-lg font-medium text-white mb-4">Your Uploaded Videos</h3>
               {userVideos.length > 0 ? (
                 <div className="mt-4 space-y-2 flex-grow overflow-y-auto">
                   {userVideos.map((video, index) => (
-                    <div key={index} className="p-2 border border-gray-300 text-black rounded-md">
-                      <p className="text-sm font-medium">
-                        <strong>Video:</strong> {video.name || "Unnamed Video"}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Category: {video.category}
-                      </p>
+                    <div 
+                      key={index} 
+                      className="p-4 bg-gray-800 border border-gray-700 rounded-xl hover:border-gray-600 transition-colors"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="flex-shrink-0">
+                          <svg 
+                            className="w-5 h-5 text-white opacity-60" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                          >
+                            <path 
+                              strokeLinecap="round" 
+                              strokeLinejoin="round" 
+                              strokeWidth="2" 
+                              d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white truncate">
+                            {video.name || "Unnamed Video"}
+                          </p>
+                          <p className="text-xs text-white opacity-60">
+                            Category: {video.category.replace("-", " ")}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   ))}
+                  <button
+                    onClick={() => alert('Feature coming soon!')}
+                    className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                  >
+                    See Your Uploaded Videos
+                  </button>
                 </div>
               ) : (
-                <p className="text-gray-600 mt-4">You have not uploaded any videos yet.</p>
+                <div className="mt-4 p-6 bg-gray-800 rounded-xl border border-gray-700 text-center">
+                  <svg 
+                    className="mx-auto h-12 w-12 text-white opacity-60" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth="2" 
+                      d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                  <p className="mt-2 text-white opacity-60">No uploaded videos yet</p>
+                  <button
+                    onClick={() => alert('Feature coming soon!')}
+                    className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                  >
+                    See Your Uploaded Videos
+                  </button>
+                </div>
               )}
             </div>
-          </div>
-
-          {/* Close Button */}
-          <div className="flex justify-center">
-            <button
-              onClick={toggleProfileModal}
-              className={styles.closeButton}
-            >
-              Exit Focus
-            </button>
           </div>
         </div>
       </div>
@@ -1235,7 +1383,7 @@ export default function App() {
               onClick={toggleFullscreen}
               className={styles.closeButton}
             >
-              Exit Focus
+              Exit Focus Mode
             </button>
             
             <div className="bg-transparent w-full h-full overflow-y-scroll snap-y snap-mandatory">
@@ -1283,43 +1431,96 @@ export default function App() {
       )}
 
       {/* Right Column - Comments, Interactions, and Auth */}
-      <div className="w-1/2 bg-white p-8 flex flex-col items-center space-y-4 h-full border-l border-black">
+      <div className="w-1/2 bg-black p-8 flex flex-col items-center space-y-4 h-full border-l border-white">
         {/* Row 1: Comments Display */}
-        <div className="flex-grow h-full w-full border-b border-black p-4 overflow-y-auto">
-          <h2 className="text-lg text-black font-semibold">Comments</h2>
+        <div className="flex-grow h-full w-full border-b border-white p-6 overflow-y-auto bg-black">
+          <h2 className="text-2xl text-white font-bold mb-6">Comments</h2>
           {currentVideo ? (
-            <div className="mt-4 space-y-2">
+            <div className="space-y-4">
               {/* Video Information */}
-              <div className="bg-gray-100 p-4 rounded-lg">
-                <p className="text-lg text-black font-semibold">{currentVideo.name}</p>
-                <p className="text-sm text-black">Uploaded by: {currentVideo.uploaderName}</p>
+              <div className="bg-gray-900 shadow-md rounded-xl p-5 border border-gray-800">
+                <p className="text-xl text-white font-semibold mb-2">{currentVideo.name}</p>
+                <div className="flex items-center space-x-2">
+                  <svg className="w-4 h-4 text-white opacity-60" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
+                  </svg>
+                  <p className="text-sm text-white opacity-60">
+                    Uploaded by: <span className="font-medium text-white">{currentVideo.uploaderName}</span>
+                  </p>
+                </div>
               </div>
+
               {/* Comments List */}
               {currentVideo.comments && currentVideo.comments.length > 0 ? (
-                currentVideo.comments.map((comment, index) => (
-                  <div
-                    key={index}
-                    className="p-2 border border-gray-300 text-black rounded-md"
-                  >
-                    <p className="text-sm font-medium">{comment.username || "Anonymous"}</p>
-                    <p>{comment.text}</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(comment.timestamp).toLocaleString()}
-                    </p>
-                  </div>
-                ))
+                <div className="space-y-3">
+                  {currentVideo.comments.map((comment, index) => (
+                    <div
+                      key={index}
+                      className="bg-gray-900 p-4 rounded-xl shadow-lg border border-gray-800 hover:border-gray-700 transition-all"
+                    >
+                      <div className="flex items-center space-x-2 mb-2">
+                        <div className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center">
+                          <span className="text-white font-semibold font-poppins">
+                            {(comment.username || "Anonymous").charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white font-poppins">
+                            {comment.username || "Anonymous"}
+                          </p>
+                          <p className="text-xs text-white opacity-60 font-poppins">
+                            {new Date(comment.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-white ml-10 font-poppins text-[15px] leading-relaxed">
+                        {comment.text}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <p className="text-gray-500">No comments yet. Be the first to comment!</p>
+                <div className="text-center py-10 bg-gray-900 rounded-xl shadow-lg border border-gray-800">
+                  <svg
+                    className="mx-auto h-12 w-12 text-white opacity-60"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                    />
+                  </svg>
+                  <p className="mt-2 text-white text-sm font-poppins">No comments yet. Be the first to comment!</p>
+                </div>
               )}
             </div>
           ) : (
-            <p className="text-gray-500 mt-4">Scroll through the videos to see comments.</p>
+            <div className="text-center py-10 bg-gray-900 rounded-xl shadow-lg border border-gray-800">
+              <svg
+                className="mx-auto h-12 w-12 text-white opacity-60"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
+              </svg>
+              <p className="mt-2 text-white text-sm">Scroll through the videos to see comments.</p>
+            </div>
           )}
         </div>
 
         {/* Row 2: Add Comment Section */}
-        <div className="flex-grow h-full w-full border-b border-black p-4">
-          <h2 className="text-lg text-black font-semibold">Add a Comment</h2>
+        <div className="flex-grow h-full w-full border-b border-white p-6 bg-black">
+          <h2 className="text-lg text-white font-semibold">Add a Comment</h2>
           {currentVideo ? (
             <div className="mt-4">
               {/* Comment Input */}
@@ -1327,13 +1528,13 @@ export default function App() {
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="Write your comment..."
-                className="w-full px-4 py-2 border border-gray-300 text-black rounded-md"
+                className="w-full px-4 py-2 bg-gray-900 border border-gray-800 text-white rounded-xl placeholder-gray-500 focus:outline-none focus:border-gray-700 focus:ring-1 focus:ring-gray-700"
                 rows={3}
               ></textarea>
               {/* Action Buttons */}
               <button
                 onClick={handleAddComment}
-                className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md"
+                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
               >
                 Add Comment
               </button>
@@ -1341,188 +1542,242 @@ export default function App() {
                 {/* Like Button */}
                 <button
                   onClick={handleLike}
-                  className={`px-4 py-2 text-white rounded-md hover:bg-opacity-80 ${
+                  className={`px-4 py-2 text-white rounded-xl hover:bg-opacity-80 transition-colors ${
                     currentVideo?.likes?.some((like) => 
                       like.username === (user?.displayName || user?.email)
                     )
-                      ? "bg-red-500"
-                      : "bg-blue-500"
+                      ? "bg-red-600 hover:bg-red-700"
+                      : "bg-blue-600 hover:bg-blue-700"
                   }`}
                 >
-                  Like
+                  <div className="flex items-center space-x-2">
+                    <svg 
+                      className="w-5 h-5" 
+                      fill="currentColor" 
+                      viewBox="0 0 20 20"
+                    >
+                      <path 
+                        fillRule="evenodd" 
+                        d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" 
+                        clipRule="evenodd" 
+                      />
+                    </svg>
+                    <span>Like</span>
+                  </div>
                 </button>
                 {/* Share Button */}
                 <button
                   onClick={() => currentVideo && handleShare(currentVideo)}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center space-x-2"
                 >
-                  Share
+                  <svg 
+                    className="w-5 h-5" 
+                    fill="currentColor" 
+                    viewBox="0 0 20 20"
+                  >
+                    <path 
+                      d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"
+                    />
+                  </svg>
+                  <span>Share</span>
                 </button>
               </div>
             </div>
           ) : (
-            <p className="text-gray-500 mt-4">
-              Scroll through the videos to leave a comment or like a video.
-            </p>
+            <div className="mt-4 p-6 bg-gray-900 rounded-xl border border-gray-800">
+              <div className="flex items-center justify-center space-x-3 text-gray-500">
+                <svg 
+                  className="w-6 h-6" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth="2" 
+                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+                <p className="text-sm">
+                  Scroll through the videos to leave a comment or like a video.
+                </p>
+              </div>
+            </div>
           )}
         </div>
 
         {/* Row 3: Authentication and Profile Section */}
-        <div className="flex-grow h-full">
+        <div className="flex-grow h-full w-full p-6 bg-black">
+          <h2 className="text-2xl text-white font-bold mb-6">Account</h2>
           {user ? (
-            <>
+            <div className="space-y-6">
               {/* Logged-in User Actions */}
-              <button
-                onClick={toggleProfileModal}
-                className="px-6 py-3 bg-blue-500 text-black rounded-lg text-lg"
-              >
-                Profile
-              </button>
+              <div className="flex space-x-4">
+                <button
+                  onClick={toggleProfileModal}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                >
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                  </svg>
+                  <span>Profile</span>
+                </button>
+
+                <button
+                  onClick={() => auth.signOut()}
+                  className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors flex items-center space-x-2"
+                >
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
+                  </svg>
+                  <span>Sign Out</span>
+                </button>
+              </div>
 
               {/* Profile Modal */}
               {isProfileModalOpen && <ProfileModal />}
 
-              {/* Sign Out Button */}
-              <button
-                onClick={() => auth.signOut()}
-                className="px-4 py-2 bg-red-500 text-black rounded-md"
-              >
-                Sign Out
-              </button>
-
               {/* Video Upload Section */}
-              <input
-                type="text"
-                placeholder="Enter video name"
-                value={videoName}
-                onChange={(e) => setVideoName(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 text-black rounded-md"
-              />
-
-              {/* Category Selection */}
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="mt-4 px-4 py-2 border text-black border-gray-300 rounded-md"
-              >
-                <option value="">Select Category</option>
-                {VideoCategories.map((category) => (
-                  <option key={category} value={category}>
-                    {category.replace("-", " ")}
-                  </option>
-                ))}
-              </select>
-
-              {/* Upload Button */}
-              <label
-                htmlFor="video-upload"
-                className={`mt-4 px-4 py-2 ${
-                  uploading ? "bg-gray-500" : "bg-green-500"
-                } text-white rounded-md cursor-pointer hover:bg-green-600`}
-              >
-                {uploading ? "Uploading..." : "Upload Video"}
-              </label>
-              <input
-                type="file"
-                id="video-upload"
-                accept="video/*"
-                className="hidden"
-                onChange={handleVideoUpload}
-                disabled={uploading || !selectedCategory}
-              />
-            </>
-          ) : (
-            // Authentication Forms for Non-logged-in Users
-            <div className="space-y-4">
-              <h1 className="text-xl font-semibold text-center mb-4">
-                {isSignUp ? "Create an Account" : "Sign In"}
-              </h1>
-              
-              {/* Email Input */}
-              <input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md text-black"
-              />
-
-              {/* Password Input */}
-              <input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md text-black"
-              />
-
-              {/* Additional Sign Up Fields */}
-              {isSignUp && (
-                <>
+              <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
+                <h3 className="text-lg text-white font-semibold mb-4">Upload Video</h3>
+                <div className="space-y-4">
                   <input
                     type="text"
-                    placeholder="Name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-black"
+                    placeholder="Enter video name"
+                    value={videoName}
+                    onChange={(e) => setVideoName(e.target.value)}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-white rounded-xl placeholder-gray-500 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600"
                   />
-                  <input
-                    type="text"
-                    placeholder="Username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-black"
-                  />
-                  <input
-                    type="date"
-                    placeholder="Date of Birth"
-                    value={dob}
-                    onChange={(e) => setDob(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-black"
-                  />
-                  
-                  {/* Category Selection */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-black">Select your interests:</p>
+
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-white rounded-xl focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600"
+                  >
+                    <option value="">Select Category</option>
                     {VideoCategories.map((category) => (
-                      <div key={category} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          id={`signup-${category}`}
-                          checked={selectedCategories.includes(category)}
-                          onChange={() => {
-                            setSelectedCategories(prev =>
-                              prev.includes(category)
-                                ? prev.filter(c => c !== category)
-                                : [...prev, category]
-                            );
-                          }}
-                          className="mr-2"
-                        />
-                        <label htmlFor={`signup-${category}`} className="text-sm text-black">
-                          {category.replace("-", " ")}
-                        </label>
-                      </div>
+                      <option key={category} value={category}>
+                        {category.replace("-", " ")}
+                      </option>
                     ))}
-                  </div>
-                </>
-              )}
+                  </select>
 
-              {/* Auth Button */}
-              <button
-                onClick={handleAuth}
-                className="w-full px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-              >
-                {isSignUp ? "Sign Up" : "Sign In"}
-              </button>
+                  <label
+                    htmlFor="video-upload"
+                    className={`block w-full px-4 py-3 text-center rounded-xl cursor-pointer transition-colors ${
+                      uploading 
+                        ? "bg-gray-700 text-gray-400" 
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                  >
+                    <div className="flex items-center justify-center space-x-2">
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                      </svg>
+                      <span>{uploading ? "Uploading..." : "Upload Video"}</span>
+                    </div>
+                  </label>
+                  <input
+                    type="file"
+                    id="video-upload"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={handleVideoUpload}
+                    disabled={uploading || !selectedCategory}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
+              <h3 className="text-xl text-white font-semibold text-center mb-6">
+                {isSignUp ? "Create an Account" : "Sign In"}
+              </h3>
+              
+              <div className="space-y-4">
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-white rounded-xl placeholder-gray-500 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600"
+                />
 
-              {/* Toggle Sign Up/Sign In */}
-              <button
-                onClick={() => setIsSignUp(!isSignUp)}
-                className="w-full text-blue-500 hover:text-blue-600"
-              >
-                {isSignUp ? "Already have an account? Sign In" : "Need an account? Sign Up"}
-              </button>
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-white rounded-xl placeholder-gray-500 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600"
+                />
+
+                {isSignUp && (
+                  <>
+                    <input
+                      type="text"
+                      placeholder="Name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-white rounded-xl placeholder-gray-500 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-white rounded-xl placeholder-gray-500 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600"
+                    />
+                    <input
+                      type="date"
+                      placeholder="Date of Birth"
+                      value={dob}
+                      onChange={(e) => setDob(e.target.value)}
+                      className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-white rounded-xl placeholder-gray-500 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600"
+                    />
+                    
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium text-gray-300">Select your interests:</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {VideoCategories.map((category) => (
+                          <div key={category} className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id={`signup-${category}`}
+                              checked={selectedCategories.includes(category)}
+                              onChange={() => {
+                                setSelectedCategories(prev =>
+                                  prev.includes(category)
+                                    ? prev.filter(c => c !== category)
+                                    : [...prev, category]
+                                );
+                              }}
+                              className="w-4 h-4 text-blue-600 border-gray-700 rounded focus:ring-blue-500 focus:ring-offset-gray-800"
+                            />
+                            <label htmlFor={`signup-${category}`} className="text-sm text-gray-300">
+                              {category.replace("-", " ")}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <button
+                  onClick={handleAuth}
+                  className="w-full px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                >
+                  {isSignUp ? "Sign Up" : "Sign In"}
+                </button>
+
+                <button
+                  onClick={() => setIsSignUp(!isSignUp)}
+                  className="w-full text-blue-400 hover:text-blue-300 transition-colors text-sm"
+                >
+                  {isSignUp ? "Already have an account? Sign In" : "Need an account? Sign Up"}
+                </button>
+              </div>
             </div>
           )}
         </div>
