@@ -25,6 +25,8 @@ RIGHT COLUMN:
 
 "use client";
 
+import styles from './page.module.css';
+
 // Core React imports
 import { useState, useEffect, useRef } from "react";
 
@@ -97,6 +99,10 @@ export default function App() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [userPreferences, setUserPreferences] = useState<string[]>([]);
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+
+  // Add this with your other state declarations at the top
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreenPlaying, setIsFullscreenPlaying] = useState<{ [key: number]: boolean }>({});
 
   // Video Display and Interaction States
   const [videos, setVideos] = useState<{
@@ -182,6 +188,110 @@ export default function App() {
       });
     }
   };
+
+  // Add this toggle function with your other functions
+  const toggleFullscreen = () => {
+    if (!isFullscreen) {
+      // Entering fullscreen - existing code remains the same
+      const currentIndex = videos.findIndex(v => v.id === currentVideo?.id);
+      const normalVideo = document.querySelector(`#video-${currentIndex}`) as HTMLVideoElement;
+      const currentTime = normalVideo?.currentTime || 0;
+
+      videos.forEach((_, index) => {
+        const normalVideo = document.querySelector(`#video-${index}`) as HTMLVideoElement;
+        if (normalVideo) {
+          normalVideo.pause();
+          setIsPlaying(prev => ({ ...prev, [index]: false }));
+        }
+      });
+
+      setTimeout(() => {
+        const fullscreenVideo = document.querySelector(`#video-${currentIndex}-fullscreen`) as HTMLVideoElement;
+        if (fullscreenVideo) {
+          fullscreenVideo.currentTime = currentTime;
+          fullscreenVideo.scrollIntoView({ behavior: 'auto' });
+        }
+      }, 0);
+    } else {
+      // Exiting fullscreen - find the currently playing video in fullscreen
+      const playingIndex = Object.entries(isFullscreenPlaying)
+        .find(([_, isPlaying]) => isPlaying)?.[0];
+      
+      if (playingIndex) {
+        const index = parseInt(playingIndex);
+        const fullscreenVideo = document.querySelector(`#video-${index}-fullscreen`) as HTMLVideoElement;
+        const currentTime = fullscreenVideo?.currentTime || 0;
+
+        // Pause all fullscreen videos
+        videos.forEach((_, idx) => {
+          const fullscreenVideo = document.querySelector(`#video-${idx}-fullscreen`) as HTMLVideoElement;
+          if (fullscreenVideo) {
+            fullscreenVideo.pause();
+            setIsFullscreenPlaying(prev => ({ ...prev, [idx]: false }));
+          }
+        });
+
+        // After exiting, scroll to and play the same video in left column
+        setTimeout(() => {
+          const normalVideo = document.querySelector(`#video-${index}`) as HTMLVideoElement;
+          if (normalVideo) {
+            normalVideo.currentTime = currentTime;
+            normalVideo.scrollIntoView({ behavior: 'auto' });
+            normalVideo.play();
+            setIsPlaying(prev => ({ ...prev, [index]: true }));
+            setCurrentVideo({ ...videos[index], isPlaying: true });
+          }
+        }, 0);
+      }
+    }
+    
+    setIsFullscreen(!isFullscreen);
+  };
+
+  useEffect(() => {
+    if (isFullscreen) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            const videoIndex = videoRefs.current.findIndex(ref => ref === entry.target);
+            if (videoIndex === -1) return;
+
+            const fullscreenVideo = document.querySelector(`#video-${videoIndex}-fullscreen`) as HTMLVideoElement;
+            
+            if (entry.isIntersecting) {
+              // Video is visible
+              console.log(`Video ${videoIndex} is visible`); // Debug log
+              if (fullscreenVideo && fullscreenVideo.paused) {
+                fullscreenVideo.play();
+                setIsFullscreenPlaying(prev => ({ ...prev, [videoIndex]: true }));
+              }
+            } else {
+              // Video is not visible
+              console.log(`Video ${videoIndex} is not visible`); // Debug log
+              if (fullscreenVideo && !fullscreenVideo.paused) {
+                fullscreenVideo.pause();
+                setIsFullscreenPlaying(prev => ({ ...prev, [videoIndex]: false }));
+              }
+            }
+          });
+        },
+        {
+          threshold: 0.8 // Video needs to be 80% visible to trigger
+        }
+      );
+
+      // Observe all video containers
+      videoRefs.current.forEach((ref) => {
+        if (ref) {
+          observer.observe(ref);
+        }
+      });
+
+      return () => {
+        observer.disconnect();
+      };
+    }
+  }, [isFullscreen]);
 
   // Handles video playback based on scroll position
   // Automatically plays/pauses videos as they enter/leave viewport
@@ -387,17 +497,26 @@ export default function App() {
 
   // Function to toggle play/pause state of videos
   // Ensures only one video plays at a time
-  const togglePlayPause = (index: number) => {
-    const videoElement = document.querySelector(`#video-${index}`) as HTMLVideoElement;
+  const togglePlayPause = (index: number, isFullscreenVideo: boolean = false) => {
+    const videoElement = isFullscreenVideo 
+      ? document.querySelector(`#video-${index}-fullscreen`) as HTMLVideoElement
+      : document.querySelector(`#video-${index}`) as HTMLVideoElement;
+    
     if (!videoElement) return;
 
-    // Pause all other videos first
+    // Pause all videos in the same view (fullscreen or normal)
     videos.forEach((_, idx) => {
       if (idx !== index) {
-        const otherVideo = document.querySelector(`#video-${idx}`) as HTMLVideoElement;
+        const otherVideo = document.querySelector(
+          isFullscreenVideo ? `#video-${idx}-fullscreen` : `#video-${idx}`
+        ) as HTMLVideoElement;
         if (otherVideo) {
           otherVideo.pause();
-          setIsPlaying(prev => ({ ...prev, [idx]: false }));
+          if (isFullscreenVideo) {
+            setIsFullscreenPlaying(prev => ({ ...prev, [idx]: false }));
+          } else {
+            setIsPlaying(prev => ({ ...prev, [idx]: false }));
+          }
         }
       }
     });
@@ -405,11 +524,19 @@ export default function App() {
     // Toggle the clicked video
     if (videoElement.paused) {
       videoElement.play();
-      setIsPlaying(prev => ({ ...prev, [index]: true }));
+      if (isFullscreenVideo) {
+        setIsFullscreenPlaying(prev => ({ ...prev, [index]: true }));
+      } else {
+        setIsPlaying(prev => ({ ...prev, [index]: true }));
+      }
       setCurrentVideo({ ...videos[index], isPlaying: true });
     } else {
       videoElement.pause();
-      setIsPlaying(prev => ({ ...prev, [index]: false }));
+      if (isFullscreenVideo) {
+        setIsFullscreenPlaying(prev => ({ ...prev, [index]: false }));
+      } else {
+        setIsPlaying(prev => ({ ...prev, [index]: false }));
+      }
       setCurrentVideo({ ...videos[index], isPlaying: false });
     }
   };
@@ -1036,9 +1163,9 @@ export default function App() {
           <div className="flex justify-center">
             <button
               onClick={toggleProfileModal}
-              className="mt-4 px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+              className={styles.closeButton}
             >
-              Close
+              Exit Focus
             </button>
           </div>
         </div>
@@ -1051,6 +1178,10 @@ export default function App() {
     <main className="flex h-screen">
       {/* Left Column - Video Player */}
       <div className="w-1/2 bg-black overflow-y-scroll snap-y snap-mandatory h-screen left-column">
+        <button className={styles.fullscreenBtn} onClick={toggleFullscreen}>
+          Focus Mode
+        </button>
+        
         {videos.map((video, index) => (
           <div
             key={index}
@@ -1066,13 +1197,16 @@ export default function App() {
                 src={video.url}
                 className="w-auto h-full object-contain mx-auto rounded-2xl"
                 controls={false}
-                onClick={() => togglePlayPause(index)}
+                onClick={() => togglePlayPause(index, false)}
               />
 
               {/* Play/Pause Overlay Button */}
               {!isPlaying[index] && (
                 <button
-                  onClick={() => togglePlayPause(index)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    togglePlayPause(index, false);
+                  }}
                   className="absolute inset-0 flex items-center justify-center"
                 >
                   <div className="w-20 h-20 flex items-center justify-center rounded-full bg-black/50">
@@ -1092,6 +1226,61 @@ export default function App() {
           </div>
         ))}
       </div>
+
+      {/* Fullscreen Overlay */}
+      {isFullscreen && (
+        <div className={styles.fullscreenOverlay}>
+          <div className={styles.fullscreenContent}>
+            <button 
+              onClick={toggleFullscreen}
+              className={styles.closeButton}
+            >
+              Exit Focus
+            </button>
+            
+            <div className="bg-transparent w-full h-full overflow-y-scroll snap-y snap-mandatory">
+              {videos.map((video, index) => (
+                <div
+                  key={index}
+                  ref={(el) => {
+                    videoRefs.current[index] = el;
+                  }}
+                  className="h-screen w-full snap-start relative flex items-center justify-center"
+                >
+                  <div className="relative flex items-center justify-center h-full w-full">
+                    <video
+                      id={`video-${index}-fullscreen`}
+                      src={video.url}
+                      className="w-auto h-full object-contain mx-auto"
+                      controls={false}
+                      onClick={() => togglePlayPause(index, true)}
+                    />
+                    {!isFullscreenPlaying[index] && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          togglePlayPause(index, true);
+                        }}
+                        className="absolute inset-0 flex items-center justify-center"
+                      >
+                        <div className="w-20 h-20 flex items-center justify-center rounded-full bg-black/50">
+                          <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        </div>
+                      </button>
+                    )}
+                    <div className="absolute bottom-4 left-0 right-0 text-white z-10 text-center">
+                      <h3 className="text-xl font-semibold">{video.name}</h3>
+                      <p className="text-base opacity-80">@{video.uploaderName}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Right Column - Comments, Interactions, and Auth */}
       <div className="w-1/2 bg-white p-8 flex flex-col items-center space-y-4 h-full border-l border-black">
