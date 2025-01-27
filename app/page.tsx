@@ -109,6 +109,7 @@ export default function App() {
     likes: { username: string; timestamp: string }[];
     category: string;
   }[]>([]);
+  
   const [currentVideo, setCurrentVideo] = useState<{
     id: string;
     url: string;
@@ -1049,14 +1050,14 @@ export default function App() {
   return (
     <main className="flex h-screen">
       {/* Left Column - Video Player */}
-      <div className="w-1/2 bg-white overflow-y-scroll snap-y snap-mandatory h-screen left-column">
+      <div className="w-1/2 bg-black overflow-y-scroll snap-y snap-mandatory h-screen left-column">
         {videos.map((video, index) => (
           <div
             key={index}
             ref={(el) => {
               videoRefs.current[index] = el;
             }}
-            className="h-screen w-full snap-start relative bg-white flex items-center justify-center"
+            className="h-screen w-full snap-start relative bg-black flex items-center justify-center"
           >
             <div className="relative flex items-center justify-center h-full w-full">
               {/* Video Element */}
@@ -1083,7 +1084,7 @@ export default function App() {
               )}
 
               {/* Video Information Overlay */}
-              <div className="absolute bottom-4 left-0 right-0 text-black z-10 text-center">
+              <div className="absolute bottom-4 left-0 right-0 text-white z-10 text-center">
                 <h3 className="text-xl font-semibold">{video.name}</h3>
                 <p className="text-base opacity-80">@{video.uploaderName}</p>
               </div>
@@ -1244,10 +1245,95 @@ export default function App() {
           ) : (
             // Authentication Forms for Non-logged-in Users
             <div className="space-y-4">
-              <h1 className="text-xl font-semibold text-center">
+              <h1 className="text-xl font-semibold text-center mb-4">
                 {isSignUp ? "Create an Account" : "Sign In"}
               </h1>
-              {/* Authentication form fields */}
+              
+              {/* Email Input */}
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md text-black"
+              />
+
+              {/* Password Input */}
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md text-black"
+              />
+
+              {/* Additional Sign Up Fields */}
+              {isSignUp && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-black"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-black"
+                  />
+                  <input
+                    type="date"
+                    placeholder="Date of Birth"
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-black"
+                  />
+                  
+                  {/* Category Selection */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-black">Select your interests:</p>
+                    {VideoCategories.map((category) => (
+                      <div key={category} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id={`signup-${category}`}
+                          checked={selectedCategories.includes(category)}
+                          onChange={() => {
+                            setSelectedCategories(prev =>
+                              prev.includes(category)
+                                ? prev.filter(c => c !== category)
+                                : [...prev, category]
+                            );
+                          }}
+                          className="mr-2"
+                        />
+                        <label htmlFor={`signup-${category}`} className="text-sm text-black">
+                          {category.replace("-", " ")}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Auth Button */}
+              <button
+                onClick={handleAuth}
+                className="w-full px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+              >
+                {isSignUp ? "Sign Up" : "Sign In"}
+              </button>
+
+              {/* Toggle Sign Up/Sign In */}
+              <button
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="w-full text-blue-500 hover:text-blue-600"
+              >
+                {isSignUp ? "Already have an account? Sign In" : "Need an account? Sign Up"}
+              </button>
             </div>
           )}
         </div>
