@@ -58,7 +58,8 @@ import {
   orderBy, 
   getDoc,
   collection, 
-  getDocs 
+  getDocs,
+  writeBatch 
 } from "firebase/firestore";
 
 // Local Firebase configuration
@@ -103,6 +104,8 @@ export default function App() {
   // Add this with your other state declarations at the top
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFullscreenPlaying, setIsFullscreenPlaying] = useState<{ [key: number]: boolean }>({});
+  // User Authentication State
+  const [userId, setUserId] = useState<string | null>(null);
 
   // Video Display and Interaction States
   const [videos, setVideos] = useState<{
@@ -113,6 +116,7 @@ export default function App() {
     uploaderId: string;
     comments: { username: string; text: string; timestamp: string }[];
     likes: { username: string; timestamp: string }[];
+    dislikes: { username: string; timestamp: string }[];  // Add this line
     category: string;
   }[]>([]);
   
@@ -124,6 +128,7 @@ export default function App() {
     uploaderId: string;
     comments: { username: string; text: string; timestamp: string }[];
     likes: { username: string; timestamp: string }[];
+    dislikes: { username: string; timestamp: string }[];  // Add this line
     category: string;
     isPlaying?: boolean;
   } | null>(null);
@@ -137,6 +142,7 @@ export default function App() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [userVideos, setUserVideos] = useState<UploadedVideo[]>([]);
   const [likedVideos, setLikedVideos] = useState<{ videoName: string; }[]>([]);
+  const [dislikedVideos, setDislikedVideos] = useState<{ videoName: string; }[]>([]);
 
   // Video Player References and States
   const videoRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -161,7 +167,14 @@ export default function App() {
     dob?: string;
     interests?: string[];
     videos?: { name: string; likes?: string[] }[];
+    subscriptions: string[];  // Array of creator IDs the user is subscribed to
   }
+
+  // New state for subscription
+  const [isSubscribed, setIsSubscribed] = useState(false);
+
+  // Add this with your other state declarations
+  const [creatorNames, setCreatorNames] = useState<{[key: string]: string}>({});
 
   // Function to load more videos when user scrolls
   // This supports infinite scrolling functionality
@@ -186,6 +199,73 @@ export default function App() {
         );
         return [...prev, ...newVideos];
       });
+    }
+  };
+
+  // Update your useEffect for auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        setUserId(null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Check if user is subscribed when component mounts
+  useEffect(() => {
+    const checkSubscriptionStatus = async () => {
+      if (!userId || !currentVideo) return;
+      
+      try {
+        const userDoc = await getDoc(doc(db, 'users', userId));
+        const userData = userDoc.data();
+        
+        // Check if current video creator is in user's subscriptions
+        setIsSubscribed(userData?.subscriptions?.includes(currentVideo?.uploaderId) || false);
+      } catch (error) {
+        console.error('Error checking subscription status:', error);
+      }
+    };
+    
+    checkSubscriptionStatus();
+  }, [userId, currentVideo?.uploaderId]);
+
+  const handleSubscribe = async () => {
+    if (!userId) {
+      alert("Please log in to subscribe");
+      return;
+    }
+
+    if (!currentVideo?.uploaderId) {
+      alert("Cannot find video creator");
+      return;
+    }
+
+    const userRef = doc(db, 'users', userId);
+    
+    try {
+      if (isSubscribed) {
+        // Unsubscribe: Remove creator from user's subscriptions
+        await updateDoc(userRef, {
+          subscriptions: arrayRemove(currentVideo.uploaderId)
+        });
+        setIsSubscribed(false);
+        alert("Unsubscribed successfully!");
+      } else {
+        // Subscribe: Add creator to user's subscriptions
+        await updateDoc(userRef, {
+          subscriptions: arrayUnion(currentVideo.uploaderId)
+        });
+        setIsSubscribed(true);
+        alert("Subscribed successfully!");
+      }
+    } catch (error) {
+      console.error('Error updating subscription:', error);
+      alert("Error updating subscription. Please try again.");
     }
   };
 
@@ -355,6 +435,7 @@ export default function App() {
           uploaderId: data.uploaderId,
           comments: data.comments || [],
           likes: data.likes || [],
+          dislikes: data.dislikes || [],  // Add this line
           category: data.category || "Uncategorized",
         };
       });
@@ -425,6 +506,7 @@ export default function App() {
             uploaderId: data.uploaderId,
             comments: data.comments || [],
             likes: data.likes || [],
+            dislikes: data.dislikes || [],  // Add this line
             category: data.category,
           };
         });
@@ -444,6 +526,7 @@ export default function App() {
             uploaderId: data.uploaderId,
             comments: data.comments || [],
             likes: data.likes || [],
+            dislikes: data.dislikes || [],  // Add this line
             category: data.category,
           };
         })
@@ -751,6 +834,125 @@ export default function App() {
     }
   };
 
+  const handleDislike = async () => {
+    if (!user) {
+      alert("You must be logged in to dislike a video.");
+      return;
+    }
+  
+    if (!currentVideo) {
+      alert("No video selected.");
+      return;
+    }
+  
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const videoDocRef = doc(db, "videos", currentVideo.id);
+  
+      const userDoc = await getDoc(userDocRef);
+      const videoDoc = await getDoc(videoDocRef);
+  
+      // Check if user has already disliked the video
+      const userDislikes = userDoc.exists() ? userDoc.data().dislikes || [] : [];
+      const alreadyDisliked = userDislikes.some((dislike: { url: string }) => dislike.url === currentVideo.url);
+  
+      const timestamp = new Date().toISOString();
+      // Prepare dislike data for user's profile
+      const userDislikeData = {
+        timestamp,
+        url: currentVideo.url,
+        videoName: currentVideo.name,
+      };
+  
+      // Prepare dislike data for video document
+      const videoDislikeData = {
+        timestamp,
+        username: user.displayName || user.email || "Anonymous",
+      };
+  
+      if (alreadyDisliked) {
+        // Remove dislike: Remove the dislike data
+        await updateDoc(userDocRef, {
+          dislikes: arrayRemove(...userDislikes.filter((dislike: { url: string }) => dislike.url === currentVideo.url))
+        });
+        await updateDoc(videoDocRef, {
+          dislikes: arrayRemove(...(videoDoc.data()?.dislikes || []).filter((dislike: { username: string }) => 
+            dislike.username === (user.displayName || user.email || "Anonymous")
+          ))
+        });
+  
+        // Update local states for removing dislike
+        setVideos(prevVideos => 
+          prevVideos.map(video => 
+            video.id === currentVideo.id 
+              ? {
+                  ...video,
+                  dislikes: video.dislikes?.filter(dislike => 
+                    dislike.username !== (user.displayName || user.email || "Anonymous")
+                  ) || []
+                }
+              : video
+          )
+        );
+  
+        setCurrentVideo(prev => 
+          prev ? {
+            ...prev,
+            dislikes: prev.dislikes?.filter(dislike => 
+              dislike.username !== (user.displayName || user.email || "Anonymous")
+            ) || []
+          } : null
+        );
+  
+        alert("Video dislike removed successfully!");
+      } else {
+        // Dislike: Add the dislike data
+        await updateDoc(userDocRef, {
+          dislikes: arrayUnion(userDislikeData),
+        });
+  
+        await updateDoc(videoDocRef, {
+          dislikes: arrayUnion(videoDislikeData),
+        });
+  
+        // Update local states for dislike
+        setVideos(prevVideos => 
+          prevVideos.map(video => 
+            video.id === currentVideo.id 
+              ? {
+                  ...video,
+                  dislikes: [...(video.dislikes || []), videoDislikeData]
+                }
+              : video
+          )
+        );
+  
+        setCurrentVideo(prev => 
+          prev ? {
+            ...prev,
+            dislikes: [...(prev.dislikes || []), videoDislikeData]
+          } : null
+        );
+  
+        alert("Video disliked successfully!");
+      }
+  
+    } catch (error) {
+      console.error("Error toggling dislike:", error);
+      alert("Failed to update dislike status. Please try again.");
+    }
+  };
+  
+  
+  
+  
+
+
+
+
+
+
+
   // Function to handle video sharing
   // Uses Web Share API if available, falls back to clipboard copy
   const handleShare = async (video: any) => {
@@ -837,11 +1039,18 @@ export default function App() {
 
       if (userDoc.exists()) {
         const data = userDoc.data();
-        setUserInfo(data);
-        setSelectedInterests(data.interests || []);
+        setUserInfo({
+          ...data,
+          subscriptions: data.subscriptions || []
+        });
+        
+        // Fetch creator names if there are subscriptions
+        if (data.subscriptions?.length > 0) {
+          await fetchCreatorNames(data.subscriptions);
+        }
       }
     } catch (error) {
-      console.error("Error fetching user info:", error);
+      console.error('Error fetching user info:', error);
     }
   };
 
@@ -998,6 +1207,7 @@ export default function App() {
         uploaderId: user.uid,
         comments: [],
         likes: [],
+        dislikes: [],  // Add this line
       });
   
       alert("Video uploaded successfully!");
@@ -1011,11 +1221,39 @@ export default function App() {
     }
   };
 
+  // Add this function to fetch creator names
+const fetchCreatorNames = async (creatorIds: string[]) => {
+  console.log('Fetching creator names for:', creatorIds);
+  try {
+    const names: {[key: string]: string} = {};
+    for (const creatorId of creatorIds) {
+      console.log('Fetching name for creator:', creatorId);
+      const creatorDoc = await getDoc(doc(db, 'users', creatorId));
+      console.log('Creator doc:', creatorDoc.data());
+      const creatorData = creatorDoc.data();
+      names[creatorId] = creatorData?.username || creatorData?.name || creatorData?.email || 'Unknown Creator';
+    }
+    console.log('Final creator names:', names);
+    return names;
+  } catch (error) {
+    console.error('Error fetching creator names:', error);
+    return {};
+  }
+};
+
+
+
+
+
+
   // All the code that has to do with the profileModal
   // Displays user information, liked videos, comments, and uploaded videos
   const ProfileModal = () => {
+    console.log('ProfileModal rendered');  // Debug log
+
     // Fetch user information when modal opens
     useEffect(() => {
+      console.log('ProfileModal useEffect triggered', user);  // Debug log
       if (user) {
         const fetchUserInfo = async () => {
           try {
@@ -1024,7 +1262,16 @@ export default function App() {
 
             if (userDoc.exists()) {
               const data = userDoc.data();
-              setUserInfo(data);
+              console.log('User data fetched:', data);  // Debug log
+              setUserInfo({
+                ...data,
+                subscriptions: data.subscriptions || []
+              });
+              
+              // Fetch creator names if there are subscriptions
+              if (data.subscriptions?.length > 0) {
+                await fetchCreatorNames(data.subscriptions);
+              }
             }
           } catch (error) {
             console.error("Error fetching user info:", error);
@@ -1034,6 +1281,28 @@ export default function App() {
         fetchUserInfo();
       }
     }, [user]);
+
+    // Add fetchCreatorNames function inside ProfileModal
+    const fetchCreatorNames = async (creatorIds: string[]) => {
+      console.log('Fetching creator names for:', creatorIds);  // Debug log
+      try {
+        const names: {[key: string]: string} = {};
+        for (const creatorId of creatorIds) {
+          const userDocRef = doc(db, "users", creatorId);
+          const userDoc = await getDoc(userDocRef);
+
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            console.log('Creator data:', data);  // Debug log
+            names[creatorId] = data.username || data.name || data.email || "Anonymous";
+          }
+        }
+        console.log('Setting creator names:', names);  // Debug log
+        setCreatorNames(names);
+      } catch (error) {
+        console.error('Error fetching creator names:', error);
+      }
+    };
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1069,9 +1338,9 @@ export default function App() {
 
           <h2 className="text-2xl font-semibold mb-4 text-white">Profile</h2>
 
-          {/* 4 Columns Grid Layout */}
+          {/* 5 Columns Grid Layout */}
           <div
-            className="grid grid-cols-4 gap-4"
+            className="grid grid-cols-5 gap-4"
             style={{
               height: "calc(100% - 100px)",
             }}
@@ -1283,12 +1552,6 @@ export default function App() {
                       </div>
                     </div>
                   ))}
-                  <button
-                    onClick={() => alert('Feature coming soon!')}
-                    className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-                  >
-                    See Your Uploaded Videos
-                  </button>
                 </div>
               ) : (
                 <div className="mt-4 p-6 bg-gray-800 rounded-xl border border-gray-700 text-center">
@@ -1306,12 +1569,64 @@ export default function App() {
                     />
                   </svg>
                   <p className="mt-2 text-white opacity-60">No uploaded videos yet</p>
-                  <button
-                    onClick={() => alert('Feature coming soon!')}
-                    className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                </div>
+              )}
+            </div>
+
+            {/* Column 5: Subscriptions */}
+            <div className="bg-gray-900 p-4 rounded-xl border border-white">
+              <h3 className="text-lg font-medium text-white mb-4">Your Subscriptions</h3>
+              {userInfo && userInfo.subscriptions && userInfo.subscriptions.length > 0 ? (
+                <div className="mt-4 space-y-2 flex-grow overflow-y-auto">
+                  {userInfo.subscriptions.map((creatorId, index) => {
+                    console.log('Rendering subscription:', creatorId, creatorNames[creatorId]);  // Debug log
+                    return (
+                      <div 
+                        key={index}
+                        className="p-4 bg-gray-800 border border-gray-700 rounded-xl hover:border-gray-600 transition-colors"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="flex-shrink-0">
+                            <svg 
+                              className="w-5 h-5 text-white opacity-60" 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round" 
+                                strokeWidth={2} 
+                                d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">
+                              {creatorNames[creatorId] || 'Loading...'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="mt-4 p-6 bg-gray-800 rounded-xl border border-gray-700 text-center">
+                  <svg 
+                    className="mx-auto h-12 w-12 text-white opacity-60" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
                   >
-                    See Your Uploaded Videos
-                  </button>
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <p className="mt-2 text-white opacity-60">No subscriptions yet</p>
                 </div>
               )}
             </div>
@@ -1368,7 +1683,7 @@ export default function App() {
               {/* Video Information Overlay */}
               <div className="absolute bottom-4 left-0 right-0 text-white z-10 text-center">
                 <h3 className="text-xl font-semibold">{video.name}</h3>
-                <p className="text-base opacity-80">@{video.uploaderName}</p>
+                <p className="text-base opacity-60">@{video.uploaderName}</p>
               </div>
             </div>
           </div>
@@ -1420,7 +1735,7 @@ export default function App() {
                     )}
                     <div className="absolute bottom-4 left-0 right-0 text-white z-10 text-center">
                       <h3 className="text-xl font-semibold">{video.name}</h3>
-                      <p className="text-base opacity-80">@{video.uploaderName}</p>
+                      <p className="text-base opacity-60">@{video.uploaderName}</p>
                     </div>
                   </div>
                 </div>
@@ -1460,22 +1775,20 @@ export default function App() {
                     >
                       <div className="flex items-center space-x-2 mb-2">
                         <div className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center">
-                          <span className="text-white font-semibold font-poppins">
+                          <span className="text-white font-semibold">
                             {(comment.username || "Anonymous").charAt(0).toUpperCase()}
                           </span>
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-white font-poppins">
+                          <p className="text-sm font-semibold text-white">
                             {comment.username || "Anonymous"}
                           </p>
-                          <p className="text-xs text-white opacity-60 font-poppins">
+                          <p className="text-xs text-white opacity-60">
                             {new Date(comment.timestamp).toLocaleString()}
                           </p>
                         </div>
                       </div>
-                      <p className="text-white ml-10 font-poppins text-[15px] leading-relaxed">
-                        {comment.text}
-                      </p>
+                      <p className="text-white ml-10 font-poppins">{comment.text}</p>
                     </div>
                   ))}
                 </div>
@@ -1513,7 +1826,7 @@ export default function App() {
                   d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
                 />
               </svg>
-              <p className="mt-2 text-white text-sm">Scroll through the videos to see comments.</p>
+              <p className="mt-2 text-white text-sm font-poppins">Scroll through the videos to see comments.</p>
             </div>
           )}
         </div>
@@ -1538,49 +1851,97 @@ export default function App() {
               >
                 Add Comment
               </button>
-              <div className="mt-4 flex space-x-4">
+              <div className="mt-4 space-y-4">
                 {/* Like Button */}
                 <button
                   onClick={handleLike}
-                  className={`px-4 py-2 text-white rounded-xl hover:bg-opacity-80 transition-colors ${
+                  className={`mx-auto px-6 py-2 text-white rounded-xl hover:bg-opacity-80 transition-colors ${
                     currentVideo?.likes?.some((like) => 
                       like.username === (user?.displayName || user?.email)
+                    )
+                      ? "bg-green-600 hover:bg-green-700"
+                      : "bg-blue-600 hover:bg-blue-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-center space-x-2">
+                    <svg 
+                      className="w-5 h-5" 
+                      fill="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path 
+                        d="M2 20.054v-8.866h4V20.054H2zM22 11.188c0-.478-.193-.937-.536-1.28A1.824 1.824 0 0020.2 9.37h-5.034l.76-3.647.024-.247c0-.316-.126-.61-.347-.832L14.772 3.82 8.412 10.187c-.268.268-.412.621-.412.999v7.23c0 .779.632 1.412 1.412 1.412h7.794c.587 0 1.095-.362 1.305-.875l2.139-5.015c.063-.15.095-.314.095-.478V11.188z"
+                      />
+                    </svg>
+                    <span>Like</span>
+                  </div>
+                </button>
+                {/* Dislike Button */}
+                <button
+                  onClick={handleDislike}
+                  className={`mx-auto px-6 py-2 text-white rounded-xl hover:bg-opacity-80 transition-colors ${
+                    currentVideo?.dislikes?.some((dislike) => 
+                      dislike.username === (user?.displayName || user?.email)
                     )
                       ? "bg-red-600 hover:bg-red-700"
                       : "bg-blue-600 hover:bg-blue-700"
                   }`}
                 >
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center justify-center space-x-2">
                     <svg 
                       className="w-5 h-5" 
                       fill="currentColor" 
                       viewBox="0 0 20 20"
                     >
                       <path 
-                        fillRule="evenodd" 
-                        d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" 
-                        clipRule="evenodd" 
+                        d="M18 9.5a1.5 1.5 0 01-1.5 1.5h-4.002l.76 3.295.024.246c0 .315-.126.61-.347.832L12 16.5l-6.375-6.375a1.5 1.5 0 01-.439-1.06V3.5a1.5 1.5 0 011.5-1.5h8.25a1.5 1.5 0 011.38.914l2.25 5.5A1.5 1.5 0 0118 9.5z"
                       />
                     </svg>
-                    <span>Like</span>
+                    <span>Dislike</span>
                   </div>
                 </button>
-                {/* Share Button */}
-                <button
-                  onClick={() => currentVideo && handleShare(currentVideo)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center space-x-2"
-                >
-                  <svg 
-                    className="w-5 h-5" 
-                    fill="currentColor" 
-                    viewBox="0 0 20 20"
+                {/* Share and Subscribe Buttons Container */}
+                <div className="flex space-x-4">
+                  {/* Share Button */}
+                  <button
+                    onClick={() => currentVideo && handleShare(currentVideo)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center space-x-2 w-24"
                   >
-                    <path 
-                      d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"
-                    />
-                  </svg>
-                  <span>Share</span>
-                </button>
+                    <svg 
+                      className="w-5 h-5" 
+                      fill="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path 
+                        d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"
+                      />
+                    </svg>
+                    <span>Share</span>
+                  </button>
+                  {/* Subscribe Button */}
+                  <button
+                    onClick={handleSubscribe}
+                    className={`px-4 py-2 ${
+                      isSubscribed ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-blue-600 hover:bg-blue-700'
+                    } text-white rounded-xl transition-colors flex items-center space-x-2 w-32`}
+                  >
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      className="w-5 h-5" 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                    >
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={2} 
+                        d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <span>{isSubscribed ? 'Subscribed' : 'Subscribe'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
@@ -1599,7 +1960,7 @@ export default function App() {
                     d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
                   />
                 </svg>
-                <p className="text-sm">
+                <p className="text-sm font-poppins">
                   Scroll through the videos to leave a comment or like a video.
                 </p>
               </div>
@@ -1785,5 +2146,4 @@ export default function App() {
     </main>
   );
 }
-
 
