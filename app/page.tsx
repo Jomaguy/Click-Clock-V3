@@ -375,31 +375,49 @@ export default function App() {
 
   // Handles video playback based on scroll position
   // Automatically plays/pauses videos as they enter/leave viewport
-  const handleScroll = () => {
+  const handleScroll = async () => {
     if (!videoRefs.current) return;
 
-    videoRefs.current.forEach((ref, index) => {
-      if (ref) {
-        const rect = ref.getBoundingClientRect();
-        const videoElement = document.querySelector(`#video-${index}`) as HTMLVideoElement;
-        
-        // Check if video is fully visible in the viewport
-        if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
-          // Video is visible - play it and update states
-          if (videoElement && videoElement.paused) {
-            videoElement.play();
-            setIsPlaying(prev => ({ ...prev, [index]: true }));
-            setCurrentVideo({ ...videos[index], isPlaying: true });
-          }
-        } else {
-          // Video is not visible - pause it
-          if (videoElement && !videoElement.paused) {
-            videoElement.pause();
-            setIsPlaying(prev => ({ ...prev, [index]: false }));
+    try {
+      await Promise.all(videoRefs.current.map(async (ref, index) => {
+        if (ref) {
+          const rect = ref.getBoundingClientRect();
+          const videoElement = document.querySelector(`#video-${index}`) as HTMLVideoElement;
+          
+          if (!videoElement) return;
+
+          // Check if video is fully visible in the viewport
+          if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
+            // Video is visible - play it and update states
+            if (videoElement.paused) {
+              try {
+                await videoElement.play();
+                setIsPlaying(prev => ({ ...prev, [index]: true }));
+                setCurrentVideo({ ...videos[index], isPlaying: true });
+              } catch (error) {
+                if (error instanceof Error && error.name !== 'AbortError') {
+                  console.error('Error playing video:', error);
+                }
+              }
+            }
+          } else {
+            // Video is not visible - pause it
+            if (!videoElement.paused) {
+              try {
+                await videoElement.pause();
+                setIsPlaying(prev => ({ ...prev, [index]: false }));
+              } catch (error) {
+                if (error instanceof Error && error.name !== 'AbortError') {
+                  console.error('Error pausing video:', error);
+                }
+              }
+            }
           }
         }
-      }
-    });
+      }));
+    } catch (error) {
+      console.error('Error in scroll handler:', error);
+    }
   };
   
   // Sets up scroll event listener for the left column
@@ -466,17 +484,7 @@ export default function App() {
     }
   };
 
-  // Effect hook to fetch preferences when user logs in or updates them
-  useEffect(() => {
-    const fetchPreferences = async () => {
-      if (user) {
-        const preferences = await fetchUserPreferences(user.uid);
-        setUserPreferences(preferences);
-      }
-    };
-
-    fetchPreferences();
-  }, [user]);
+ 
 
   // Function to recommend videos based on user preferences
   // Returns a sorted array of videos, prioritizing user's preferred categories
@@ -580,47 +588,55 @@ export default function App() {
 
   // Function to toggle play/pause state of videos
   // Ensures only one video plays at a time
-  const togglePlayPause = (index: number, isFullscreenVideo: boolean = false) => {
+  const togglePlayPause = async (index: number, isFullscreenVideo: boolean = false) => {
     const videoElement = isFullscreenVideo 
       ? document.querySelector(`#video-${index}-fullscreen`) as HTMLVideoElement
       : document.querySelector(`#video-${index}`) as HTMLVideoElement;
     
     if (!videoElement) return;
 
-    // Pause all videos in the same view (fullscreen or normal)
-    videos.forEach((_, idx) => {
-      if (idx !== index) {
-        const otherVideo = document.querySelector(
-          isFullscreenVideo ? `#video-${idx}-fullscreen` : `#video-${idx}`
-        ) as HTMLVideoElement;
-        if (otherVideo) {
-          otherVideo.pause();
-          if (isFullscreenVideo) {
-            setIsFullscreenPlaying(prev => ({ ...prev, [idx]: false }));
-          } else {
-            setIsPlaying(prev => ({ ...prev, [idx]: false }));
+    try {
+      // Pause all other videos first
+      await Promise.all(videos.map(async (_, idx) => {
+        if (idx !== index) {
+          const otherVideo = document.querySelector(
+            isFullscreenVideo ? `#video-${idx}-fullscreen` : `#video-${idx}`
+          ) as HTMLVideoElement;
+          if (otherVideo && !otherVideo.paused) {
+            await otherVideo.pause();
+            if (isFullscreenVideo) {
+              setIsFullscreenPlaying(prev => ({ ...prev, [idx]: false }));
+            } else {
+              setIsPlaying(prev => ({ ...prev, [idx]: false }));
+            }
           }
         }
-      }
-    });
+      }));
 
-    // Toggle the clicked video
-    if (videoElement.paused) {
-      videoElement.play();
-      if (isFullscreenVideo) {
-        setIsFullscreenPlaying(prev => ({ ...prev, [index]: true }));
+      // Then handle the clicked video
+      if (videoElement.paused) {
+        try {
+          await videoElement.play();
+          if (isFullscreenVideo) {
+            setIsFullscreenPlaying(prev => ({ ...prev, [index]: true }));
+          } else {
+            setIsPlaying(prev => ({ ...prev, [index]: true }));
+          }
+          setCurrentVideo({ ...videos[index], isPlaying: true });
+        } catch (error) {
+          console.error('Error playing video:', error);
+        }
       } else {
-        setIsPlaying(prev => ({ ...prev, [index]: true }));
+        await videoElement.pause();
+        if (isFullscreenVideo) {
+          setIsFullscreenPlaying(prev => ({ ...prev, [index]: false }));
+        } else {
+          setIsPlaying(prev => ({ ...prev, [index]: false }));
+        }
+        setCurrentVideo({ ...videos[index], isPlaying: false });
       }
-      setCurrentVideo({ ...videos[index], isPlaying: true });
-    } else {
-      videoElement.pause();
-      if (isFullscreenVideo) {
-        setIsFullscreenPlaying(prev => ({ ...prev, [index]: false }));
-      } else {
-        setIsPlaying(prev => ({ ...prev, [index]: false }));
-      }
-      setCurrentVideo({ ...videos[index], isPlaying: false });
+    } catch (error) {
+      console.error('Error toggling video playback:', error);
     }
   };
 
@@ -1118,40 +1134,8 @@ export default function App() {
     }
   }, [user]);
 
-  // The code below manages user preferences that can be changed from the user's profile
-  const handleInterestChange = (interest: string) => {
-    setSelectedInterests((prevInterests) =>
-      prevInterests.includes(interest)
-        ? prevInterests.filter((i) => i !== interest)
-        : [...prevInterests, interest]
-    );
-  };
 
-  // Updates user preferences in Firestore and refreshes video recommendations
-  const handleUpdatePreferences = async () => {
-    if (!user) return;
-
-    try {
-      const userDocRef = doc(db, "users", user.uid);
-      await updateDoc(userDocRef, {
-        interests: selectedInterests
-      });
-
-      // Update local state for user preferences
-      setUserPreferences(selectedInterests);
-
-      // Fetch new recommended videos based on updated preferences
-      const newRecommendedVideos = await recommendVideos(user.uid);
-      setVideos(newRecommendedVideos);
-
-      alert("Preferences updated successfully!");
-      toggleProfileModal(); // Close the modal after updating
-    } catch (error) {
-      console.error("Error updating preferences:", error);
-      alert("Failed to update preferences. Please try again.");
-    }
-  };
-
+ 
   // Handle video upload
   // Processes file upload, saves to Firebase Storage, and updates Firestore
   const handleVideoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1362,31 +1346,6 @@ const fetchCreatorNames = async (creatorIds: string[]) => {
                   <p className="text-white">
                     <strong className="text-white opacity-80">Date of Birth:</strong> {userInfo.dob || "N/A"}
                   </p>
-                  <div className="text-white">
-                    <strong className="text-white opacity-80">Interests:</strong>
-                    <div className="mt-2 space-y-2">
-                      {VideoCategories.map((interest) => (
-                        <div key={interest} className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id={interest}
-                            checked={selectedInterests.includes(interest)}
-                            onChange={() => handleInterestChange(interest)}
-                            className="w-4 h-4 bg-gray-800 border-gray-700 rounded text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900"
-                          />
-                          <label htmlFor={interest} className="text-white">
-                            {interest.replace("-", " ")}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      onClick={handleUpdatePreferences}
-                      className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors w-full"
-                    >
-                      Update Preferences
-                    </button>
-                  </div>
                 </div>
               ) : (
                 <p className="text-white opacity-60 mt-4">Loading user information...</p>
