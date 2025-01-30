@@ -1091,24 +1091,20 @@ export default function App() {
   };
 
   // Add this function to fetch creator names
-const fetchCreatorNames = async (creatorIds: string[]) => {
-  console.log('Fetching creator names for:', creatorIds);
-  try {
-    const names: {[key: string]: string} = {};
-    for (const creatorId of creatorIds) {
-      console.log('Fetching name for creator:', creatorId);
-      const creatorDoc = await getDoc(doc(db, 'users', creatorId));
-      console.log('Creator doc:', creatorDoc.data());
-      const creatorData = creatorDoc.data();
-      names[creatorId] = creatorData?.username || creatorData?.name || creatorData?.email || 'Unknown Creator';
+  const fetchCreatorNames = async (creatorIds: string[]) => {
+    try {
+      const names: {[key: string]: string} = {};
+      for (const creatorId of creatorIds) {
+        const creatorDoc = await getDoc(doc(db, 'users', creatorId));
+        const creatorData = creatorDoc.data();
+        names[creatorId] = creatorData?.username || creatorData?.name || creatorData?.email || 'Unknown Creator';
+      }
+      return names;
+    } catch (error) {
+      console.error('Error fetching creator names:', error);
+      return {};
     }
-    console.log('Final creator names:', names);
-    return names;
-  } catch (error) {
-    console.error('Error fetching creator names:', error);
-    return {};
-  }
-};
+  };
 
 
 
@@ -1118,11 +1114,8 @@ const fetchCreatorNames = async (creatorIds: string[]) => {
   // All the code that has to do with the profileModal
   // Displays user information, liked videos, comments, and uploaded videos
   const ProfileModal = () => {
-    console.log('ProfileModal rendered');  // Debug log
-
     // Fetch user information when modal opens
     useEffect(() => {
-      console.log('ProfileModal useEffect triggered', user);  // Debug log
       if (user) {
         const fetchUserInfo = async () => {
           try {
@@ -1131,7 +1124,6 @@ const fetchCreatorNames = async (creatorIds: string[]) => {
 
             if (userDoc.exists()) {
               const data = userDoc.data();
-              console.log('User data fetched:', data);  // Debug log
               setUserInfo({
                 ...data,
                 subscriptions: data.subscriptions || []
@@ -1153,7 +1145,6 @@ const fetchCreatorNames = async (creatorIds: string[]) => {
 
     // Add fetchCreatorNames function inside ProfileModal
     const fetchCreatorNames = async (creatorIds: string[]) => {
-      console.log('Fetching creator names for:', creatorIds);  // Debug log
       try {
         const names: {[key: string]: string} = {};
         for (const creatorId of creatorIds) {
@@ -1162,11 +1153,9 @@ const fetchCreatorNames = async (creatorIds: string[]) => {
 
           if (userDoc.exists()) {
             const data = userDoc.data();
-            console.log('Creator data:', data);  // Debug log
             names[creatorId] = data.username || data.name || data.email || "Anonymous";
           }
         }
-        console.log('Setting creator names:', names);  // Debug log
         setCreatorNames(names);
       } catch (error) {
         console.error('Error fetching creator names:', error);
@@ -1238,6 +1227,7 @@ const fetchCreatorNames = async (creatorIds: string[]) => {
             </div>
 
             {/* Column 2: Liked Videos */}
+            {/*
             <div className="bg-gray-900 p-4 rounded-xl border border-white">
               <h3 className="text-lg font-medium text-white mb-4">Liked Videos</h3>
               {likedVideos.length > 0 ? (
@@ -1299,8 +1289,10 @@ const fetchCreatorNames = async (creatorIds: string[]) => {
                 </div>
               )}
             </div>
+            */}
 
             {/* Column 3: User Comments */}
+            {/*
             <div className="bg-gray-900 p-4 rounded-xl border border-white">
               <h3 className="text-lg font-medium text-white mb-4">Your Comments</h3>
               {userComments.length > 0 ? (
@@ -1358,8 +1350,10 @@ const fetchCreatorNames = async (creatorIds: string[]) => {
                 </div>
               )}
             </div>
+            */}
 
             {/* Column 4: Uploaded Videos */}
+            {/*
             <div className="bg-gray-900 p-4 rounded-xl border border-white">
               <h3 className="text-lg font-medium text-white mb-4">Your Uploaded Videos</h3>
               {userVideos.length > 0 ? (
@@ -1416,14 +1410,15 @@ const fetchCreatorNames = async (creatorIds: string[]) => {
                 </div>
               )}
             </div>
+            */}
 
             {/* Column 5: Subscriptions */}
+            {/*
             <div className="bg-gray-900 p-4 rounded-xl border border-white">
               <h3 className="text-lg font-medium text-white mb-4">Your Subscriptions</h3>
               {userInfo && userInfo.subscriptions && userInfo.subscriptions.length > 0 ? (
                 <div className="mt-4 space-y-2 flex-grow overflow-y-auto">
                   {userInfo.subscriptions.map((creatorId, index) => {
-                    console.log('Rendering subscription:', creatorId, creatorNames[creatorId]);  // Debug log
                     return (
                       <div 
                         key={index}
@@ -1474,6 +1469,7 @@ const fetchCreatorNames = async (creatorIds: string[]) => {
                 </div>
               )}
             </div>
+            */}
           </div>
         </div>
       </div>
