@@ -7,6 +7,7 @@ export interface VideoType {
   comments: { username: string; text: string; timestamp: string }[];
   likes: { username: string; timestamp: string }[];
   category: string;
+  timestamp?: string;
 }
 
 export interface User {
