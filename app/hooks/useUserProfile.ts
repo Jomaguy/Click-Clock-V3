@@ -1,47 +1,48 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { UserProfile, CategoryEngagement } from '../types/userProfile';
 
+const UPDATE_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
+
 export function useUserProfile(userId: string | null) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastUpdateRef = useRef<number>(0);
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Aggregate user interactions into category preferences
+  // Aggregate interactions into user profile
   const aggregateInteractions = useCallback(async () => {
-    if (!userId) return null;
+    if (!userId) return;
 
     try {
-      // Query all user interactions
+      setLoading(true);
+      
+      // Get all user interactions
       const interactionsRef = collection(db, "user_interactions");
-      const userInteractionsQuery = query(
-        interactionsRef,
-        where("userId", "==", userId)
-      );
-      
-      const querySnapshot = await getDocs(userInteractionsQuery);
-      
-      // Initialize aggregation objects
-      const categoryPreferences: { [category: string]: CategoryEngagement } = {};
-      const activeHours: { [hour: number]: number } = {};
+      const q = query(interactionsRef, where("userId", "==", userId));
+      const querySnapshot = await getDocs(q);
+
+      // Initialize aggregated data
+      const categoryPreferences: { [key: string]: CategoryEngagement } = {};
+      const activeHours: { [key: number]: number } = {};
       let totalWatchTime = 0;
 
       // Process each interaction
       querySnapshot.forEach((doc) => {
         const interaction = doc.data();
-        const interactionDate = new Date(interaction.timestamp);
+        const category = interaction.category;
+        const watchTime = interaction.watchPercentage * 60; // Convert percentage to seconds
+        const interactionDate = new Date(interaction.lastUpdated || interaction.timestamp);
         const hour = interactionDate.getHours();
 
-        // Update active hours
-        activeHours[hour] = (activeHours[hour] || 0) + 1;
-
-        // Get or initialize category engagement
-        if (!categoryPreferences[interaction.category]) {
-          categoryPreferences[interaction.category] = {
-            category: interaction.category,
+        // Update category preferences
+        if (!categoryPreferences[category]) {
+          categoryPreferences[category] = {
+            category,
             watchTime: 0,
             completionRate: 0,
             interactions: { likes: 0, comments: 0, shares: 0 },
@@ -49,98 +50,113 @@ export function useUserProfile(userId: string | null) {
           };
         }
 
-        const categoryData = categoryPreferences[interaction.category];
-
-        // Update watch time and completion rate
-        const watchTimeSeconds = (interaction.watchPercentage / 100) * (300); // Assuming average video length of 5 minutes
-        categoryData.watchTime += watchTimeSeconds;
-        totalWatchTime += watchTimeSeconds;
-
-        // Update completion rate as rolling average
-        const oldCount = categoryData.completionRate > 0 ? 1 : 0;
-        categoryData.completionRate = (
-          (categoryData.completionRate * oldCount + interaction.watchPercentage) / 
-          (oldCount + 1)
-        );
-
-        // Update interaction counts
+        categoryPreferences[category].watchTime += watchTime;
+        categoryPreferences[category].completionRate = 
+          (categoryPreferences[category].completionRate + interaction.watchPercentage) / 2;
+        
         if (interaction.interactions) {
-          if (interaction.interactions.liked) categoryData.interactions.likes++;
-          if (interaction.interactions.commented) categoryData.interactions.comments++;
-          if (interaction.interactions.shared) categoryData.interactions.shares++;
+          if (interaction.interactions.liked) categoryPreferences[category].interactions.likes++;
+          if (interaction.interactions.commented) categoryPreferences[category].interactions.comments++;
+          if (interaction.interactions.shared) categoryPreferences[category].interactions.shares++;
         }
 
-        // Update last interaction time if more recent
-        if (interaction.timestamp > categoryData.lastInteracted) {
-          categoryData.lastInteracted = interaction.timestamp;
+        if (new Date(interaction.lastUpdated || interaction.timestamp) > 
+            new Date(categoryPreferences[category].lastInteracted)) {
+          categoryPreferences[category].lastInteracted = interaction.lastUpdated || interaction.timestamp;
         }
+
+        // Update active hours
+        activeHours[hour] = (activeHours[hour] || 0) + 1;
+
+        // Update total watch time
+        totalWatchTime += watchTime;
       });
 
-      // Update the user profile
-      const updatedProfile: UserProfile = {
+      // Create or update user profile
+      const profileRef = doc(db, "user_profiles", userId);
+      const newProfile: UserProfile = {
         userId,
-        lastActive: new Date().toISOString(),
         totalWatchTime,
         categoryPreferences,
         activeHours,
+        lastActive: new Date().toISOString(),
         lastUpdated: new Date().toISOString()
       };
 
-      // Save to Firestore
-      const profileRef = doc(db, "user_profiles", userId);
-      await setDoc(profileRef, updatedProfile);
-      setProfile(updatedProfile);
+      await setDoc(profileRef, newProfile, { merge: true });
+      setProfile(newProfile);
+      lastUpdateRef.current = Date.now();
       
-      return updatedProfile;
-    } catch (err) {
-      setError('Failed to aggregate user interactions');
-      return null;
+    } catch (error) {
+      console.error("Error aggregating interactions:", error);
+      setError("Failed to update profile");
+    } finally {
+      setLoading(false);
     }
   }, [userId]);
 
-  // Fetch or create user profile
-  const loadUserProfile = useCallback(async () => {
-    if (!userId) return null;
-    
-    setLoading(true);
-    setError(null);
+  // Function to check if update is needed
+  const checkAndUpdate = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastUpdateRef.current >= UPDATE_INTERVAL) {
+      await aggregateInteractions();
+    }
+  }, [aggregateInteractions]);
+
+  // Initial profile load
+  const loadProfile = useCallback(async () => {
+    if (!userId) {
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
 
     try {
-      // Try to fetch existing profile
+      setLoading(true);
       const profileRef = doc(db, "user_profiles", userId);
-      const profileDoc = await getDoc(profileRef);
+      const profileSnap = await getDoc(profileRef);
 
-      if (profileDoc.exists()) {
-        const profileData = profileDoc.data() as UserProfile;
+      if (profileSnap.exists()) {
+        const profileData = profileSnap.data() as UserProfile;
         setProfile(profileData);
-        return profileData;
+        lastUpdateRef.current = Date.now();
+      } else {
+        await aggregateInteractions();
       }
-
-      // If no profile exists, create a new one and aggregate interactions
-      const newProfile = await aggregateInteractions();
-      if (!newProfile) {
-        throw new Error('Failed to create initial profile');
-      }
-      
-      return newProfile;
-    } catch (err) {
-      setError('Failed to load user profile');
-      return null;
+    } catch (error) {
+      console.error("Error loading profile:", error);
+      setError("Failed to load profile");
     } finally {
       setLoading(false);
     }
   }, [userId, aggregateInteractions]);
 
-  // Load profile on mount or userId change
+  // Set up periodic updates
   useEffect(() => {
-    loadUserProfile();
-  }, [userId, loadUserProfile]);
+    loadProfile();
+
+    // Set up interval for periodic updates
+    const intervalId = setInterval(checkAndUpdate, UPDATE_INTERVAL);
+
+    // Cleanup
+    return () => {
+      clearInterval(intervalId);
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+    };
+  }, [userId, loadProfile, checkAndUpdate]);
+
+  // Manual refresh function
+  const refreshProfile = useCallback(async () => {
+    await aggregateInteractions();
+  }, [aggregateInteractions]);
 
   return {
     profile,
     loading,
     error,
-    refreshProfile: loadUserProfile,
+    refreshProfile,
     aggregateInteractions
   };
 } 
