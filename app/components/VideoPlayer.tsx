@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useEffect } from 'react';
+import { useInteractionTracking } from '../hooks/useInteractionTracking';
+import { User } from 'firebase/auth';
 
 interface VideoPlayerProps {
   video: {
@@ -11,11 +13,11 @@ interface VideoPlayerProps {
     uploaderId: string;
     comments: { username: string; text: string; timestamp: string }[];
     likes: { username: string; timestamp: string }[];
-    dislikes: { username: string; timestamp: string }[];
     category: string;
   };
   index: number;
   isPlaying: boolean;
+  user: User | null;
   onVideoRefAction: (el: HTMLDivElement | null, index: number) => void;
   onTogglePlayPauseAction: (index: number) => void;
   onVideoVisibleAction: (video: VideoPlayerProps['video']) => void;
@@ -24,7 +26,8 @@ interface VideoPlayerProps {
 export default function VideoPlayer({ 
   video, 
   index, 
-  isPlaying, 
+  isPlaying,
+  user,
   onVideoRefAction,
   onTogglePlayPauseAction,
   onVideoVisibleAction,
@@ -32,6 +35,55 @@ export default function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const userInteractedRef = useRef(false);
   const isPlayingRef = useRef(false);
+  
+  // Initialize interaction tracking
+  const { initializeInteraction, updateWatchPercentage } = useInteractionTracking(user?.uid || null);
+
+  // Track video progress
+  useEffect(() => {
+    if (!videoRef.current || !user) return;
+
+    let lastUpdateTime = 0;
+    let hasReachedEnd = false;
+
+    const handleTimeUpdate = () => {
+      if (!videoRef.current) return;
+      
+      const currentTime = videoRef.current.currentTime;
+      const duration = videoRef.current.duration;
+      
+      // Only update every second to reduce console spam
+      if (currentTime - lastUpdateTime >= 1) {
+        lastUpdateTime = currentTime;
+        
+        if (duration > 0) {
+          // If we've reached the end before, keep it at 100%
+          if (hasReachedEnd) {
+            updateWatchPercentage(video.id, 100);
+            return;
+          }
+
+          const percentage = (currentTime / duration) * 100;
+          updateWatchPercentage(video.id, percentage);
+        }
+      }
+    };
+
+    const handleEnded = () => {
+      hasReachedEnd = true;
+      updateWatchPercentage(video.id, 100);
+    };
+
+    videoRef.current.addEventListener('timeupdate', handleTimeUpdate);
+    videoRef.current.addEventListener('ended', handleEnded);
+
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.removeEventListener('timeupdate', handleTimeUpdate);
+        videoRef.current.removeEventListener('ended', handleEnded);
+      }
+    };
+  }, [video.id, user, updateWatchPercentage]);
 
   const handlePlayback = async (shouldPlay: boolean) => {
     if (!videoRef.current || isPlayingRef.current === shouldPlay) return;
@@ -75,7 +127,7 @@ export default function VideoPlayer({
     }
   };
 
-  // Handle video playback based on visibility
+  // Handle video visibility changes
   useEffect(() => {
     let isHandlingVisibility = false;
     let timeoutId: NodeJS.Timeout;
@@ -92,6 +144,11 @@ export default function VideoPlayer({
         
         try {
           if (entry.isIntersecting && entry.intersectionRatio > 0.7) {
+            // Initialize interaction tracking when video becomes visible
+            if (user) {
+              await initializeInteraction(video.id, video.category);
+            }
+            
             // Only auto-play if user hasn't manually paused
             if (!userInteractedRef.current) {
               // Reset video to start when scrolling back to it
@@ -146,7 +203,7 @@ export default function VideoPlayer({
         observer.disconnect();
       };
     }
-  }, [index, onTogglePlayPauseAction, onVideoVisibleAction, video, isPlaying]);
+  }, [video, onVideoVisibleAction, user, initializeInteraction]);
 
   const handleVideoClick = async (e: React.MouseEvent) => {
     e.preventDefault();

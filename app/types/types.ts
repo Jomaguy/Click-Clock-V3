@@ -6,9 +6,7 @@ export interface VideoType {
   uploaderId: string;
   comments: { username: string; text: string; timestamp: string }[];
   likes: { username: string; timestamp: string }[];
-  dislikes: { username: string; timestamp: string }[];
   category: string;
-  isPlaying?: boolean;
 }
 
 export interface User {

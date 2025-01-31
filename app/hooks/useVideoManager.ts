@@ -26,7 +26,6 @@ export function useVideoManager(user: User | null) {
           uploaderId: data.uploaderId,
           comments: data.comments || [],
           likes: data.likes || [],
-          dislikes: data.dislikes || [],
           category: data.category || "Uncategorized",
         };
       });
@@ -176,9 +175,23 @@ export function useVideoManager(user: User | null) {
     const likeData = { username, timestamp };
 
     try {
-      await updateDoc(videoDocRef, {
-        likes: isAdding ? arrayUnion(likeData) : arrayRemove(likeData)
-      });
+      if (isAdding) {
+        await updateDoc(videoDocRef, {
+          likes: arrayUnion(likeData)
+        });
+      } else {
+        // For removing, we need to find the exact like to remove
+        const videoDoc = await getDoc(videoDocRef);
+        if (videoDoc.exists()) {
+          const currentLikes = videoDoc.data().likes || [];
+          const likeToRemove = currentLikes.find((like: { username: string }) => like.username === username);
+          if (likeToRemove) {
+            await updateDoc(videoDocRef, {
+              likes: arrayRemove(likeToRemove)
+            });
+          }
+        }
+      }
 
       updateVideoInList(videoId, video => ({
         ...video,
@@ -188,29 +201,6 @@ export function useVideoManager(user: User | null) {
       }));
     } catch (error) {
       console.error("Error updating video likes:", error);
-      throw error;
-    }
-  };
-
-  // Function to update video dislikes
-  const updateVideoDislikes = async (videoId: string, userId: string, username: string, isAdding: boolean) => {
-    const videoDocRef = doc(db, "videos", videoId);
-    const timestamp = new Date().toISOString();
-    const dislikeData = { username, timestamp };
-
-    try {
-      await updateDoc(videoDocRef, {
-        dislikes: isAdding ? arrayUnion(dislikeData) : arrayRemove(dislikeData)
-      });
-
-      updateVideoInList(videoId, video => ({
-        ...video,
-        dislikes: isAdding 
-          ? [...video.dislikes, dislikeData]
-          : video.dislikes.filter(dislike => dislike.username !== username)
-      }));
-    } catch (error) {
-      console.error("Error updating video dislikes:", error);
       throw error;
     }
   };
@@ -244,7 +234,6 @@ export function useVideoManager(user: User | null) {
     setIsPlaying,
     loadMoreVideos,
     updateVideoLikes,
-    updateVideoDislikes,
     updateVideoComments,
     fetchVideos,
     recommendVideos,

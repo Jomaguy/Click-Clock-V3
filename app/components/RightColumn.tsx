@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { User } from 'firebase/auth';
-import { doc, updateDoc, arrayUnion, getDoc, collection, setDoc } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, getDoc, collection, setDoc, arrayRemove } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '../lib/firebase';
 import AuthSection from './AuthSection';
 import { VideoType } from '../types/types';
+import { useInteractionTracking } from '../hooks/useInteractionTracking';
 
 // Available video categories
 const VideoCategories = [
@@ -26,7 +27,6 @@ interface RightColumnProps {
   user: User | null;
   currentVideo: VideoType | null;
   onUpdateVideoLikesAction: (videoId: string, userId: string, username: string, isAdding: boolean) => Promise<void>;
-  onUpdateVideoDislikesAction: (videoId: string, userId: string, username: string, isAdding: boolean) => Promise<void>;
   onUpdateVideoCommentsAction: (videoId: string, username: string, text: string) => Promise<void>;
   onLoadMoreVideosAction: () => Promise<void>;
   onSetUserAction: (user: User | null) => void;
@@ -37,7 +37,6 @@ export default function RightColumn({
   user,
   currentVideo,
   onUpdateVideoLikesAction,
-  onUpdateVideoDislikesAction,
   onUpdateVideoCommentsAction,
   onLoadMoreVideosAction,
   onSetUserAction,
@@ -50,6 +49,8 @@ export default function RightColumn({
   const [uploading, setUploading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [videoName, setVideoName] = useState("");
+
+  const { updateInteraction } = useInteractionTracking(user?.uid || null);
 
   // Function to handle liking/unliking videos
   const handleLike = async () => {
@@ -64,47 +65,53 @@ export default function RightColumn({
     }
 
     try {
-      const userDocRef = doc(db, "users", user.uid);
-      const userDoc = await getDoc(userDocRef);
-
-      // Check if user has already liked the video
-      const userLikes = userDoc.exists() ? userDoc.data().likes || [] : [];
-      const alreadyLiked = userLikes.some((like: { url: string }) => like.url === currentVideo.url);
+      const username = user.displayName || user.email || "Anonymous";
+      // Check if user has already liked the video from the video's likes array
+      const alreadyLiked = currentVideo.likes.some(like => like.username === username);
 
       const timestamp = new Date().toISOString();
       // Prepare like data for user's profile
       const userLikeData = {
         timestamp,
-        url: currentVideo.url,
+        videoId: currentVideo.id,
         videoName: currentVideo.name,
       };
+
+      // Get user document reference
+      const userDocRef = doc(db, "users", user.uid);
 
       if (alreadyLiked) {
         // Unlike: Remove the like data from user profile
         await updateDoc(userDocRef, {
-          likes: arrayUnion(...userLikes.filter((like: { url: string }) => like.url === currentVideo.url))
+          likes: arrayRemove(userLikeData)
         });
 
         await onUpdateVideoLikesAction(
           currentVideo.id,
           user.uid,
-          user.displayName || user.email || "Anonymous",
+          username,
           false
         );
+
+        // Track unlike in user_interactions
+        await updateInteraction(currentVideo.id, 'liked', false);
 
         alert("Video unliked successfully!");
       } else {
         // Like: Add the like data to user profile
         await updateDoc(userDocRef, {
-          likes: arrayUnion(userLikeData),
+          likes: arrayUnion(userLikeData)
         });
 
         await onUpdateVideoLikesAction(
           currentVideo.id,
           user.uid,
-          user.displayName || user.email || "Anonymous",
+          username,
           true
         );
+
+        // Track like in user_interactions
+        await updateInteraction(currentVideo.id, 'liked', true);
 
         alert("Video liked successfully!");
       }
@@ -114,71 +121,13 @@ export default function RightColumn({
     }
   };
 
-  // Function to handle disliking videos
-  const handleDislike = async () => {
-    if (!user) {
-      alert("You must be logged in to dislike a video.");
-      return;
-    }
-
-    if (!currentVideo) {
-      alert("No video selected.");
-      return;
-    }
-
-    try {
-      const userDocRef = doc(db, "users", user.uid);
-      const userDoc = await getDoc(userDocRef);
-
-      // Check if user has already disliked the video
-      const userDislikes = userDoc.exists() ? userDoc.data().dislikes || [] : [];
-      const alreadyDisliked = userDislikes.some((dislike: { url: string }) => dislike.url === currentVideo.url);
-
-      const timestamp = new Date().toISOString();
-      // Prepare dislike data for user's profile
-      const userDislikeData = {
-        timestamp,
-        url: currentVideo.url,
-        videoName: currentVideo.name,
-      };
-
-      if (alreadyDisliked) {
-        // Remove dislike
-        await updateDoc(userDocRef, {
-          dislikes: arrayUnion(...userDislikes.filter((dislike: { url: string }) => dislike.url === currentVideo.url))
-        });
-
-        await onUpdateVideoDislikesAction(
-          currentVideo.id,
-          user.uid,
-          user.displayName || user.email || "Anonymous",
-          false
-        );
-
-        alert("Video dislike removed successfully!");
-      } else {
-        // Add dislike
-        await updateDoc(userDocRef, {
-          dislikes: arrayUnion(userDislikeData),
-        });
-
-        await onUpdateVideoDislikesAction(
-          currentVideo.id,
-          user.uid,
-          user.displayName || user.email || "Anonymous",
-          true
-        );
-
-        alert("Video disliked successfully!");
-      }
-    } catch (error) {
-      console.error("Error toggling dislike:", error);
-      alert("Failed to update dislike status. Please try again.");
-    }
-  };
-
   // Function to handle video sharing
   const handleShare = async (video: VideoType) => {
+    if (!user) {
+      alert("You must be logged in to share a video.");
+      return;
+    }
+
     try {
       if (navigator.share) {
         // Use Web Share API if available
@@ -192,6 +141,9 @@ export default function RightColumn({
         await navigator.clipboard.writeText(window.location.href);
         alert('Link copied to clipboard!');
       }
+
+      // Track share in user_interactions
+      await updateInteraction(video.id, 'shared', true);
     } catch (error) {
       console.error('Error sharing:', error);
       alert('Failed to share video');
@@ -237,6 +189,9 @@ export default function RightColumn({
         user.displayName || user.email || "Anonymous",
         comment.trim()
       );
+
+      // Track comment in user_interactions
+      await updateInteraction(currentVideo.id, 'commented', true);
 
       setComment(""); // Reset the comment input field
       alert("Comment added successfully!");
@@ -300,7 +255,6 @@ export default function RightColumn({
         uploaderId: user.uid,
         comments: [],
         likes: [],
-        dislikes: [],
       });
   
       alert("Video uploaded successfully!");
@@ -377,17 +331,6 @@ export default function RightColumn({
                   } text-white`}
                 >
                   Like ({currentVideo?.likes?.length || 0})
-                </button>
-                
-                <button
-                  onClick={handleDislike}
-                  className={`px-4 py-2 rounded ${
-                    currentVideo?.dislikes?.some(dislike => dislike.username === (user?.displayName || user?.email))
-                      ? 'bg-red-600 hover:bg-red-700'
-                      : 'bg-blue-600 hover:bg-blue-700'
-                  } text-white`}
-                >
-                  Dislike ({currentVideo?.dislikes?.length || 0})
                 </button>
                 
                 <button

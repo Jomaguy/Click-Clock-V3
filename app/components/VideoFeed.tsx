@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import VideoPlayer from './VideoPlayer';
-import { VideoType, User } from '../types/types';
+import { VideoType } from '../types/types';
+import { User } from 'firebase/auth';
 import styles from '../page.module.css';
 
 interface VideoFeedProps {
@@ -61,6 +62,7 @@ export default function VideoFeed({
           video={video}
           index={index}
           isPlaying={isPlaying[index]}
+          user={user}
           onVideoRefAction={(el) => {
             videoRefs.current[index] = el;
           }}

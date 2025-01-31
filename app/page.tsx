@@ -48,7 +48,6 @@ export default function App() {
     setIsPlaying,
     loadMoreVideos,
     updateVideoLikes,
-    updateVideoDislikes,
     updateVideoComments,
   } = useVideoManager(user);
 
@@ -84,7 +83,6 @@ export default function App() {
           user={user}
           currentVideo={currentVideo}
           onUpdateVideoLikesAction={updateVideoLikes}
-          onUpdateVideoDislikesAction={updateVideoDislikes}
           onUpdateVideoCommentsAction={updateVideoComments}
           onLoadMoreVideosAction={loadMoreVideos}
           onSetUserAction={setUser}
