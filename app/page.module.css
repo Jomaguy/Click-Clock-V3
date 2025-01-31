@@ -64,3 +64,39 @@
 .closeButton:hover {
   opacity: 0.7;
 }
+
+.container {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+  background-color: black;
+}
+
+.leftColumn {
+  width: calc(100% - 1000px);
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  position: relative;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.leftColumn::-webkit-scrollbar {
+  display: none;
+}
+
+.rightColumn {
+  width: 1000px;
+  height: 100vh;
+  overflow-y: auto;
+  background-color: rgb(17, 17, 17);
+  padding: 20px;
+  border-left: 1px solid rgb(38, 38, 38);
+  flex-shrink: 0;
+}
