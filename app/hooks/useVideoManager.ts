@@ -1,14 +1,24 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, updateDoc, arrayUnion, arrayRemove, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { VideoType, User } from '../types/types';
+import { useForYouVideos } from './useForYouVideos';
+import { useUserProfile } from './useUserProfile';
+import { UserProfile } from '../types/userProfile';
+
+interface VideoWithScore extends VideoType {
+  score?: number;
+  matchReasons?: string[];
+}
 
 export function useVideoManager(user: User | null) {
-  const [videos, setVideos] = useState<VideoType[]>([]);
-  const [currentVideo, setCurrentVideo] = useState<VideoType | null>(null);
+  const [videos, setVideos] = useState<VideoWithScore[]>([]);
+  const [currentVideo, setCurrentVideo] = useState<VideoWithScore | null>(null);
   const [isPlaying, setIsPlaying] = useState<{ [key: number]: boolean }>({});
+  const { profile: userProfile } = useUserProfile(user?.uid || null);
+  const { getPersonalizedVideos } = useForYouVideos(videos, userProfile as UserProfile);
 
   // Function to fetch all videos from Firestore
   const fetchVideos = async () => {
@@ -16,7 +26,7 @@ export function useVideoManager(user: User | null) {
       const videosCollectionRef = collection(db, "videos");
       const querySnapshot = await getDocs(videosCollectionRef);
   
-      const allVideos = querySnapshot.docs.map((doc) => {
+      const allVideos = querySnapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => {
         const data = doc.data();
         return {
           id: doc.id,
@@ -27,7 +37,7 @@ export function useVideoManager(user: User | null) {
           comments: data.comments || [],
           likes: data.likes || [],
           category: data.category || "Uncategorized",
-        };
+        } as VideoType;
       });
       return allVideos;
     } catch (error) {
@@ -36,116 +46,65 @@ export function useVideoManager(user: User | null) {
     }
   };
 
-  // Function to fetch user preferences
-  const fetchUserPreferences = async (userId: string) => {
+  // Function to load more videos with personalization
+  const loadMoreVideos = async () => {
     try {
-      const userDocRef = doc(db, "users", userId);
-      const userDoc = await getDoc(userDocRef);
-
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        return userData.interests || [];
+      const allVideos = await fetchVideos();
+      
+      if (!user || !userProfile) {
+        setVideos((prev: VideoWithScore[]) => {
+          const existingIds = new Set(prev.map(video => video.id));
+          const newVideos = allVideos
+            .filter(video => !existingIds.has(video.id))
+            .slice(0, 50);
+          return [...prev, ...newVideos];
+        });
       } else {
-        console.error("User document does not exist");
-        return [];
-      }
-    } catch (error) {
-      console.error("Error fetching user preferences:", error);
-      return [];
-    }
-  };
+        // For personalized videos
+        setVideos((prev: VideoWithScore[]) => {
+          // Get IDs of videos we already have
+          const existingIds = new Set(prev.map(video => video.id));
+          
+          // Filter out videos we already have
+          const availableVideos = allVideos.filter(video => !existingIds.has(video.id));
+          
+          if (availableVideos.length === 0) {
+            return prev; // No new videos to add
+          }
 
-  // Function to recommend videos based on user preferences
-  const recommendVideos = async (userId: string) => {
-    try {
-      const userPreferences = await fetchUserPreferences(userId);
-      const videosCollectionRef = collection(db, "videos");
+          // Score the new batch of videos
+          const scoredVideos = getPersonalizedVideos(50, prev.length);
+          
+          // Map the scored videos to include score and reasons
+          const newPersonalizedVideos = scoredVideos.map(scored => ({
+            ...scored.video,
+            score: scored.score,
+            matchReasons: scored.matchReasons
+          }));
 
-      let preferredVideos: VideoType[] = [];
-      let nonPreferredVideos: VideoType[] = [];
-
-      if (userPreferences.length > 0) {
-        const preferredVideosSnapshot = await getDocs(
-          query(videosCollectionRef, where("category", "in", userPreferences))
-        );
-
-        preferredVideos = preferredVideosSnapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            url: data.url,
-            name: data.name || "Unnamed Video",
-            uploaderName: data.uploaderName,
-            uploaderId: data.uploaderId,
-            comments: data.comments || [],
-            likes: data.likes || [],
-            dislikes: data.dislikes || [],
-            category: data.category,
-          };
+          return [...prev, ...newPersonalizedVideos];
         });
       }
-
-      const allVideosSnapshot = await getDocs(videosCollectionRef);
-      nonPreferredVideos = allVideosSnapshot.docs
-        .map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            url: data.url,
-            name: data.name || "Unnamed Video",
-            uploaderName: data.uploaderName,
-            uploaderId: data.uploaderId,
-            comments: data.comments || [],
-            likes: data.likes || [],
-            dislikes: data.dislikes || [],
-            category: data.category,
-          };
-        })
-        .filter((video) => !userPreferences.includes(video.category));
-
-      const allRecommendedVideos = [...preferredVideos, ...nonPreferredVideos];
-      const sortedVideos = allRecommendedVideos.sort(
-        (a, b) => b.likes.length - a.likes.length
-      );
-
-      return sortedVideos.slice(0, 100);
     } catch (error) {
-      console.error("Error recommending videos:", error);
-      return [];
+      console.error("Error loading more videos:", error);
     }
   };
 
-  // Function to load more videos
-  const loadMoreVideos = async () => {
-    if (!user) {
-      const allVideos = await fetchVideos();
-      setVideos(prev => {
-        const newVideos = allVideos.filter(
-          newVideo => !prev.some(existingVideo => existingVideo.id === newVideo.id)
-        );
-        return [...prev, ...newVideos];
-      });
-    } else {
-      const recommended = await recommendVideos(user.uid);
-      setVideos(prev => {
-        const newVideos = recommended.filter(
-          newVideo => !prev.some(existingVideo => existingVideo.id === newVideo.id)
-        );
-        return [...prev, ...newVideos];
-      });
-    }
-  };
-
-  // Load initial videos
+  // Load initial videos with personalization
   useEffect(() => {
     const loadInitialVideos = async () => {
       try {
-        if (user) {
-          const recommended = await recommendVideos(user.uid);
-          setVideos(recommended);
+        const allVideos = await fetchVideos();
+        if (user && userProfile) {
+          const scoredVideos = getPersonalizedVideos(50, 0);
+          const personalizedVideos = scoredVideos.map(scored => ({
+            ...scored.video,
+            score: scored.score,
+            matchReasons: scored.matchReasons
+          }));
+          setVideos(personalizedVideos);
         } else {
-          const allVideos = await fetchVideos();
-          setVideos(allVideos);
+          setVideos(allVideos.slice(0, 50)); // Load first 50 videos for non-authenticated users
         }
       } catch (error) {
         console.error("Error loading videos:", error);
@@ -153,18 +112,18 @@ export function useVideoManager(user: User | null) {
     };
 
     loadInitialVideos();
-  }, [user]);
+  }, [user, userProfile, getPersonalizedVideos]);
 
   // Function to update video in videos array
-  const updateVideoInList = (videoId: string, updateFn: (video: VideoType) => VideoType) => {
-    setVideos(prevVideos => 
-      prevVideos.map(video => 
+  const updateVideoInList = (videoId: string, updateFn: (video: VideoWithScore) => VideoWithScore) => {
+    setVideos((prevVideos: VideoWithScore[]) => 
+      prevVideos.map((video: VideoWithScore) => 
         video.id === videoId ? updateFn(video) : video
       )
     );
 
     if (currentVideo?.id === videoId) {
-      setCurrentVideo(prev => prev ? updateFn(prev) : null);
+      setCurrentVideo((prev: VideoWithScore | null) => prev ? updateFn(prev) : null);
     }
   };
 
@@ -236,6 +195,5 @@ export function useVideoManager(user: User | null) {
     updateVideoLikes,
     updateVideoComments,
     fetchVideos,
-    recommendVideos,
   };
 } 

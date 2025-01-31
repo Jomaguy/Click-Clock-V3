@@ -14,6 +14,8 @@ interface VideoPlayerProps {
     comments: { username: string; text: string; timestamp: string }[];
     likes: { username: string; timestamp: string }[];
     category: string;
+    score?: number;
+    matchReasons?: string[];
   };
   index: number;
   isPlaying: boolean;
@@ -152,7 +154,8 @@ export default function VideoPlayer({
             // Only auto-play if user hasn't manually paused
             if (!userInteractedRef.current) {
               // Reset video to start when scrolling back to it
-              if (videoRef.current.currentTime === videoRef.current.duration) {
+              if (videoRef.current && videoRef.current.duration && 
+                  videoRef.current.currentTime === videoRef.current.duration) {
                 videoRef.current.currentTime = 0;
               }
               
@@ -205,6 +208,24 @@ export default function VideoPlayer({
     }
   }, [video, onVideoVisibleAction, user, initializeInteraction]);
 
+  // Add loadedmetadata event listener
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleLoadedMetadata = () => {
+      // Video is now loaded and duration is available
+      if (video.duration && video.currentTime === video.duration) {
+        video.currentTime = 0;
+      }
+    };
+
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    return () => {
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    };
+  }, []);
+
   const handleVideoClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -240,6 +261,20 @@ export default function VideoPlayer({
           onClick={handleVideoClick}
           playsInline
         />
+
+        {/* Score Overlay */}
+        {video.score !== undefined && (
+          <div className="absolute top-4 right-4 bg-black/50 p-2 rounded-lg text-white">
+            <div className="font-bold">Score: {Math.round(video.score)}</div>
+            {video.matchReasons && video.matchReasons.length > 0 && (
+              <div className="text-sm mt-1">
+                {video.matchReasons.map((reason, i) => (
+                  <div key={i} className="text-gray-200">{reason}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Play/Pause Overlay Button */}
         {!isPlaying && (
