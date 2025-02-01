@@ -4,7 +4,10 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Replace with your Firebase config
+// Import necessary Firebase modules for app initialization and services
+
+// Firebase configuration object containing keys and identifiers for the project
+// Replace these with your own Firebase project credentials
 const firebaseConfig = {
     apiKey: "AIzaSyCVxGCud3eYd2ao0kbrS9AWCmJRPbrcTdA",
     authDomain: "click-clock-fb774.firebaseapp.com",
@@ -15,10 +18,11 @@ const firebaseConfig = {
     measurementId: "G-WNBX1TYQEH"
   };
 
-// Initialize Firebase
+// Initialize the Firebase app with the provided configuration
 const app = initializeApp(firebaseConfig);
 
-// Export Firebase services
+// Export Firebase services for authentication, Firestore database, and storage
+// These services are used throughout the app for various functionalities
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
