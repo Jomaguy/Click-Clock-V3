@@ -34,6 +34,9 @@ import RightColumn from "./components/RightColumn";
 import { useVideoManager } from './hooks/useVideoManager';
 import ProfileModal from "./components/ProfileModal";
 
+// Main application component for a video sharing platform similar to TikTok.
+// Divided into two main columns: Video player (left) and User interactions (right).
+
 export default function App() {
   // Authentication State
   const [user, setUser] = useState<User | null>(null);
@@ -51,7 +54,7 @@ export default function App() {
     updateVideoComments,
   } = useVideoManager(user);
 
-  // Update auth state and load videos
+  // Effect to handle authentication state changes and load initial videos
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -64,6 +67,9 @@ export default function App() {
 
     return () => unsubscribe();
   }, [loadMoreVideos]);
+
+  // Render the main application layout with video feed and right column for interactions
+  // Includes a modal for profile management when triggered
 
   return (
     <div className={styles.container}>
@@ -99,4 +105,9 @@ export default function App() {
     </div>
   );
 }
+
+// Return the JSX structure of the app with VideoFeed and RightColumn components
+// VideoFeed handles video display and playback
+// RightColumn manages user interactions like comments and likes
+// ProfileModal is conditionally rendered for user profile management
 
