@@ -1,3 +1,6 @@
+// Interface representing engagement metrics for a specific category
+// Tracks user interactions and engagement levels within the category
+
 export interface CategoryEngagement {
   category: string;
   watchTime: number;        // Total seconds watched
@@ -9,6 +12,9 @@ export interface CategoryEngagement {
   };
   lastInteracted: string;   // ISO timestamp
 }
+
+// Interface representing a user's profile and engagement data
+// Captures overall user activity and preferences
 
 export interface UserProfile {
   userId: string;
