@@ -15,6 +15,7 @@ interface VideoFeedProps {
   onLoadMoreAction: () => Promise<void>;
 }
 
+// VideoFeed component to display a list of videos with infinite scroll
 export default function VideoFeed({
   videos,
   user,
@@ -27,6 +28,7 @@ export default function VideoFeed({
   const isLoadingRef = useRef(false);
 
   // Debounced scroll handler for infinite scroll
+  // Loads more videos when nearing the bottom of the list
   const handleScroll = useCallback(async (target: HTMLElement) => {
     if (isLoadingRef.current) return;
 
@@ -40,6 +42,7 @@ export default function VideoFeed({
   }, [onLoadMoreAction]);
 
   // Set up scroll event listener for infinite scroll
+  // Cleans up the event listener on component unmount
   useEffect(() => {
     const leftColumn = document.querySelector(`.${styles.leftColumn}`);
     if (!leftColumn) return;
